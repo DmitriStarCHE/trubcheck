@@ -37,6 +37,7 @@ export default function AccountingPage() {
     getAllCounterparties()
       .then(list => setCounterparties(list.map(c => c.name)))
       .catch(err => setError('Не удалось загрузить контрагентов: ' + err.message))
+    import('../utils/print').catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -252,31 +253,18 @@ export default function AccountingPage() {
     }
   }
 
-  const handleShare = () => {
+  const handleShare = async () => {
     setError(null)
     setInfo(null)
+
+    if (!navigator.share) {
+      setInfo('Функция «Поделиться» не поддерживается в вашем браузере.')
+      return
+    }
+
+    setIsExporting(true)
     const docData = buildDocData()
     const typeLabel = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
-
-    const lines = [
-      `📋 ${typeLabel}`,
-      docData.date ? `📅 ${new Date(docData.date).toLocaleDateString('ru-RU')}` : '',
-      docData.counterparty ? `🏢 ${docData.counterparty}` : '',
-      docData.location ? `📍 ${docData.location}` : '',
-      docData.vehicle ? `🚛 ${docData.vehicle}` : '',
-      '',
-      ...docData.pipeTypes.flatMap(pt => {
-        const filled = (pt.lengths || []).filter(r => Number(r.length) > 0)
-        if (!filled.length || !pt.diameter) return []
-        return [`• ${pt.gost || 'б/ГОСТа'} Ø${pt.diameter}×${pt.thickness} мм — ${filled.length} шт`]
-      }),
-      '',
-      `Труб: ${docData.totalPipes} шт`,
-      `Длина: ${docData.totalLength.toFixed(2)} м`,
-      `Тоннаж: ${(docData.totalWeight / 1000).toFixed(3)} т`,
-      docData.note ? `\n📝 ${docData.note}` : '',
-    ].filter(Boolean)
-    const text = lines.join('\n')
 
     const labelMap = { 'Перед': 'front', 'Зад': 'back', 'Доп.': 'extra' }
     const photoFiles = photos.map((p, i) => {
@@ -285,18 +273,27 @@ export default function AccountingPage() {
       return new File([bytes], `${labelMap[p.label] || `photo-${i + 1}`}.jpg`, { type: 'image/jpeg' })
     })
 
-    if (!navigator.share) {
-      setInfo('Функция «Поделиться» не поддерживается в вашем браузере.')
-      return
-    }
+    try {
+      const { getDocumentBlob } = await import('../utils/print')
+      const blob = await getDocumentBlob(docData, 'pdf')
+      const pdfFile = new File([blob], `document-${Date.now()}.pdf`, { type: 'application/pdf' })
+      const allFiles = [pdfFile, ...photoFiles]
 
-    const doShare = photoFiles.length > 0 && navigator.canShare?.({ files: photoFiles })
-      ? navigator.share({ title: typeLabel, text, files: photoFiles })
-      : navigator.share({ title: typeLabel, text })
+      let shareData
+      if (navigator.canShare({ files: allFiles })) {
+        shareData = { title: typeLabel, files: allFiles }
+      } else if (navigator.canShare({ files: [pdfFile] })) {
+        shareData = { title: typeLabel, files: [pdfFile] }
+      } else {
+        shareData = { title: typeLabel, text: `${typeLabel}\n${docData.counterparty || ''}\nТоннаж: ${(docData.totalWeight / 1000).toFixed(3)} т` }
+      }
 
-    doShare.catch(err => {
+      await navigator.share(shareData)
+    } catch (err) {
       if (err.name !== 'AbortError') setError('Ошибка при отправке: ' + err.message)
-    })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handlePreview = async () => {
@@ -639,7 +636,7 @@ export default function AccountingPage() {
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </button>
-            <button className="btn btn-secondary" style={{ flex: 1 }} title="Поделиться" onClick={handleShare}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} title="Поделиться" onClick={handleShare} disabled={isExporting}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
                 <polyline points="16 6 12 2 8 6" />
