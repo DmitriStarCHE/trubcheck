@@ -204,18 +204,29 @@ export async function shareDocument(docData, photos = []) {
   const blob = await getDocumentBlob(docData, 'pdf')
   const pdfFile = new File([blob], `document-${docData.id || Date.now()}.pdf`, { type: 'application/pdf' })
 
+  const labelMap = { 'Перед': 'front', 'Зад': 'back', 'Доп.': 'extra' }
   const photoFiles = photos.map((p, i) => {
     const base64 = p.dataUrl.split(',')[1]
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-    return new File([bytes], `photo-${i + 1}-${escapeHtml(p.label)}.jpg`, { type: 'image/jpeg' })
+    const slug = labelMap[p.label] || `photo-${i + 1}`
+    return new File([bytes], `${slug}.jpg`, { type: 'image/jpeg' })
   })
 
-  const allFiles = [pdfFile, ...photoFiles]
   const title = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
 
-  if (navigator.canShare && navigator.canShare({ files: allFiles })) {
-    await navigator.share({ title, files: allFiles })
-    return true
+  // Try sharing with photos first, then PDF-only, then fallback
+  const allFiles = [pdfFile, ...photoFiles]
+  const pdfOnly = [pdfFile]
+
+  if (navigator.canShare) {
+    if (navigator.canShare({ files: allFiles })) {
+      await navigator.share({ title, files: allFiles })
+      return true
+    }
+    if (navigator.canShare({ files: pdfOnly })) {
+      await navigator.share({ title, files: pdfOnly })
+      return true
+    }
   }
 
   // Fallback: open PDF in new tab (photos can't be auto-shared without HTTPS)

@@ -83,8 +83,14 @@ export default function AccountingPage() {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
+    input.style.display = 'none'
+    document.body.appendChild(input)
+    const cleanup = () => {
+      if (document.body.contains(input)) document.body.removeChild(input)
+    }
     input.onchange = async (e) => {
       const file = e.target.files[0]
+      cleanup()
       if (!file) return
       try {
         const dataUrl = await compressImage(file)
@@ -97,8 +103,9 @@ export default function AccountingPage() {
           }
           return [...prev, { id: randomUUID(), dataUrl, label }]
         })
-      } catch { setError('Не удалось загрузить фото') }
+      } catch (err) { setError('Не удалось загрузить фото: ' + err.message) }
     }
+    input.addEventListener('cancel', cleanup)
     input.click()
   }
 
