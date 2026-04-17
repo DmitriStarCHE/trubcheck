@@ -337,7 +337,7 @@ export default function AccountingPage() {
             {errors.date && <span className="field-error">{errors.date}</span>}
           </div>
           <div className="form-group">
-            <label className="form-label">Место погрузки/выгрузки</label>
+            <label className="form-label">Место</label>
             <input type="text" placeholder="Напр. Склад №1" value={location} onChange={(e) => setLocation(e.target.value)} />
           </div>
         </div>
@@ -359,7 +359,7 @@ export default function AccountingPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Авто / Водитель</label>
+          <label className="form-label">Авто / водитель</label>
           <input type="text" placeholder="Напр. КАМАЗ А123БВ / Иванов И.И." value={vehicle} onChange={(e) => setVehicle(e.target.value)} />
         </div>
 
@@ -393,7 +393,7 @@ export default function AccountingPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Стандарт (ГОСТ)</label>
+              <label className="form-label">ГОСТ</label>
               <select value={pt.gost} onChange={(e) => updatePipeType(pi, 'gost', e.target.value)}>
                 <option value="">— Выберите ГОСТ —</option>
                 {gostKeys.map(k => <option key={k} value={k}>{k}</option>)}
@@ -432,7 +432,7 @@ export default function AccountingPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Марка стали / Класс прочности</label>
+              <label className="form-label">Марка стали</label>
               <input type="text" placeholder="Напр. Ст20" value={pt.steelGrade} onChange={(e) => updatePipeType(pi, 'steelGrade', e.target.value)} />
             </div>
 
