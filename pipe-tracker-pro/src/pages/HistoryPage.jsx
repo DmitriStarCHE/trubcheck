@@ -73,15 +73,18 @@ export default function HistoryPage() {
     if (!selectedDoc) return
     setIsExporting(true)
     setError(null)
-    const win = window.open('', '_blank')
     try {
-      const { getDocumentBlob } = await import('../utils/print')
+      const { getDocumentBlob, buildPdfFilename } = await import('../utils/print')
       const blob = await getDocumentBlob(selectedDoc, 'pdf')
       const url = URL.createObjectURL(blob)
-      win.location.href = url
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = buildPdfFilename(selectedDoc)
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
     } catch (err) {
-      win?.close()
       setError('Ошибка при генерации PDF: ' + err.message)
     } finally {
       setIsExporting(false)

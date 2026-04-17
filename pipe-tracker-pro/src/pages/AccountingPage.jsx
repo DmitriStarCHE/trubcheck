@@ -238,15 +238,19 @@ export default function AccountingPage() {
   const handleOpenPdf = async () => {
     setIsExporting(true)
     setError(null)
-    const win = window.open('', '_blank')
     try {
-      const { getDocumentBlob } = await import('../utils/print')
-      const blob = await getDocumentBlob(buildDocData(), 'pdf')
+      const { getDocumentBlob, buildPdfFilename } = await import('../utils/print')
+      const docData = buildDocData()
+      const blob = await getDocumentBlob(docData, 'pdf')
       const url = URL.createObjectURL(blob)
-      win.location.href = url
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = buildPdfFilename(docData)
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
     } catch (err) {
-      win?.close()
       setError('Ошибка при генерации PDF: ' + err.message)
     } finally {
       setIsExporting(false)

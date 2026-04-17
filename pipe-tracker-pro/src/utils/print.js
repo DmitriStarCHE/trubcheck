@@ -249,4 +249,4 @@ export async function shareDocument(docData, photos = []) {
   return false
 }
 
-export { generateDocumentHtml, escapeHtml }
+export { generateDocumentHtml, escapeHtml, buildPdfFilename }
