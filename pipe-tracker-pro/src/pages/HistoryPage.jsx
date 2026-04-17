@@ -275,6 +275,34 @@ function DocumentDetail({ doc, onBack, onPrint, onEdit, onDelete, isExporting })
 
       {/* Pipe types */}
       {doc.pipeTypes?.map((pt, i) => {
+        if (pt.mode === 'batch') {
+          const batches = (pt.batches || []).filter(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
+          if (batches.length === 0) return null
+          return (
+            <div className="card" key={i}>
+              <div className="card-header">
+                <div className="card-num">{i + 1}</div>
+                <div className="card-title">{pt.gost} — {pt.diameter}×{pt.thickness}</div>
+                <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-dim)', background: 'var(--surface)', padding: '2px 6px', borderRadius: 4 }}>пачки</span>
+              </div>
+              {pt.steelGrade && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Марка: {pt.steelGrade}</div>}
+              <div style={{ fontSize: 12 }}>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)', color: 'var(--text-dim)', fontSize: 11 }}>
+                  <span style={{ width: 32 }}>№</span><span style={{ flex: 1 }}>шт</span><span style={{ flex: 2 }}>длина, м</span><span style={{ flex: 2 }}>тоннаж, тн</span>
+                </div>
+                {batches.map((b, bi) => (
+                  <div key={bi} style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ width: 32, color: 'var(--text-dim)' }}>#{bi + 1}</span>
+                    <span style={{ flex: 1 }}>{b.count}</span>
+                    <span style={{ flex: 2 }}>{Number(b.totalLength).toFixed(2)}</span>
+                    <span style={{ flex: 2, color: 'var(--gold-light)', fontWeight: 500 }}>{Number(b.totalWeight).toFixed(3)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
         const lengths = pt.lengths?.filter(r => Number(r.length) > 0) || []
         if (lengths.length === 0) return null
         return (

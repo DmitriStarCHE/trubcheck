@@ -6,6 +6,14 @@ import { randomUUID } from '../utils/uuid'
 
 const MAX_PIPE_ROWS = 60
 
+const emptyBatch = () => ({ id: randomUUID(), count: '', totalLength: '', totalWeight: '' })
+const emptyPipeType = () => ({
+  gost: '', diameter: '', thickness: '', steelGrade: '',
+  mode: 'individual',
+  lengths: [{ id: randomUUID(), length: '' }],
+  batches: [emptyBatch()],
+})
+
 export default function AccountingPage() {
   const navigate = useNavigate()
   const { id: editId } = useParams()
@@ -21,9 +29,7 @@ export default function AccountingPage() {
   const [note, setNote] = useState('')
   const [docId, setDocId] = useState(null)
 
-  const [pipeTypes, setPipeTypes] = useState([
-    { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: randomUUID(), length: '' }] }
-  ])
+  const [pipeTypes, setPipeTypes] = useState([emptyPipeType()])
 
   const [photos, setPhotos] = useState([])
 
@@ -52,7 +58,13 @@ export default function AccountingPage() {
         setCounterparty(doc.counterparty || '')
         setVehicle(doc.vehicle || '')
         setNote(doc.note || '')
-        if (doc.pipeTypes?.length) setPipeTypes(doc.pipeTypes)
+        if (doc.pipeTypes?.length) {
+          setPipeTypes(doc.pipeTypes.map(pt => ({
+            ...pt,
+            mode: pt.mode || 'individual',
+            batches: pt.batches?.length ? pt.batches : [emptyBatch()],
+          })))
+        }
         if (doc.photos?.length) setPhotos(doc.photos)
       })
       .catch(err => setError('Не удалось загрузить документ: ' + err.message))
@@ -118,16 +130,29 @@ export default function AccountingPage() {
     let totalWeight = 0
 
     for (const pt of pipeTypes) {
-      if (!pt.diameter || !pt.thickness) continue
-      const D = Number(pt.diameter)
-      const S = Number(pt.thickness)
-      const wpm = calculateWeight(D, S)
-      for (const row of pt.lengths) {
-        const l = Number(row.length)
-        if (l > 0) {
-          totalPipes++
-          totalLength += l
-          totalWeight += wpm * l
+      if (pt.mode === 'batch') {
+        for (const b of (pt.batches || [])) {
+          const cnt = Number(b.count)
+          const len = Number(b.totalLength)
+          const wt = Number(b.totalWeight)
+          if (cnt > 0 && len > 0 && wt > 0) {
+            totalPipes += cnt
+            totalLength += len
+            totalWeight += wt * 1000
+          }
+        }
+      } else {
+        if (!pt.diameter || !pt.thickness) continue
+        const D = Number(pt.diameter)
+        const S = Number(pt.thickness)
+        const wpm = calculateWeight(D, S)
+        for (const row of pt.lengths) {
+          const l = Number(row.length)
+          if (l > 0) {
+            totalPipes++
+            totalLength += l
+            totalWeight += wpm * l
+          }
         }
       }
     }
@@ -139,14 +164,18 @@ export default function AccountingPage() {
     const errs = {}
     if (!counterparty.trim()) errs.counterparty = 'Укажите контрагента'
     if (!date) errs.date = 'Укажите дату'
-    if (totals.totalPipes === 0) errs.pipes = 'Добавьте хотя бы одну трубу с длиной > 0'
+    const hasData = pipeTypes.some(pt => {
+      if (pt.mode === 'batch') {
+        return (pt.batches || []).some(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
+      }
+      return (pt.lengths || []).some(r => Number(r.length) > 0)
+    })
+    if (!hasData) errs.pipes = 'Добавьте хотя бы одну трубу или пачку с данными'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
 
-  const addPipeType = () => {
-    setPipeTypes([...pipeTypes, { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: randomUUID(), length: '' }] }])
-  }
+  const addPipeType = () => setPipeTypes([...pipeTypes, emptyPipeType()])
 
   const removePipeType = (index) => {
     if (pipeTypes.length <= 1) return
@@ -156,38 +185,60 @@ export default function AccountingPage() {
   const updatePipeType = (index, field, value) => {
     const updated = [...pipeTypes]
     updated[index] = { ...updated[index], [field]: value }
-    if (field === 'gost') {
-      updated[index].diameter = ''
-      updated[index].thickness = ''
-    }
-    if (field === 'diameter') {
-      updated[index].thickness = ''
-    }
+    if (field === 'gost') { updated[index].diameter = ''; updated[index].thickness = '' }
+    if (field === 'diameter') { updated[index].thickness = '' }
     setPipeTypes(updated)
   }
 
+  const setMode = (pipeIndex, mode) => {
+    setPipeTypes(pipeTypes.map((p, i) => i === pipeIndex ? { ...p, mode } : p))
+  }
+
+  // Individual mode helpers
   const removeLengthRow = (pipeIndex, rowIndex) => {
     const pt = pipeTypes[pipeIndex]
     if (pt.lengths.length <= 1) return
-    const updated = pipeTypes.map((p, i) =>
+    setPipeTypes(pipeTypes.map((p, i) =>
       i === pipeIndex ? { ...p, lengths: p.lengths.filter((_, ri) => ri !== rowIndex) } : p
-    )
-    setPipeTypes(updated)
+    ))
   }
 
   const updateLength = (pipeIndex, rowIndex, value) => {
-    const updated = pipeTypes.map((p, i) => {
+    setPipeTypes(pipeTypes.map((p, i) => {
       if (i !== pipeIndex) return p
       const newLengths = p.lengths.map((r, ri) =>
         ri === rowIndex ? { ...r, length: value } : r
       )
-      // Auto-add a new empty row when typing in the last row
       if (rowIndex === newLengths.length - 1 && value !== '') {
         newLengths.push({ id: randomUUID(), length: '' })
       }
       return { ...p, lengths: newLengths }
-    })
-    setPipeTypes(updated)
+    }))
+  }
+
+  // Batch mode helpers
+  const updateBatch = (pipeIndex, batchIndex, field, value) => {
+    setPipeTypes(pipeTypes.map((p, i) => {
+      if (i !== pipeIndex) return p
+      const newBatches = p.batches.map((b, bi) =>
+        bi === batchIndex ? { ...b, [field]: value } : b
+      )
+      return { ...p, batches: newBatches }
+    }))
+  }
+
+  const addBatchRow = (pipeIndex) => {
+    setPipeTypes(pipeTypes.map((p, i) =>
+      i === pipeIndex ? { ...p, batches: [...p.batches, emptyBatch()] } : p
+    ))
+  }
+
+  const removeBatchRow = (pipeIndex, batchIndex) => {
+    setPipeTypes(pipeTypes.map((p, i) => {
+      if (i !== pipeIndex) return p
+      if (p.batches.length <= 1) return p
+      return { ...p, batches: p.batches.filter((_, bi) => bi !== batchIndex) }
+    }))
   }
 
   const buildDocData = () => ({
@@ -211,13 +262,7 @@ export default function AccountingPage() {
     setError(null)
     try {
       const doc = {
-        type,
-        date,
-        location,
-        counterparty,
-        vehicle,
-        note,
-        pipeTypes,
+        type, date, location, counterparty, vehicle, note, pipeTypes,
         totalPipes: totals.totalPipes,
         totalLength: totals.totalLength,
         totalWeight: totals.totalWeight,
@@ -349,18 +394,10 @@ export default function AccountingPage() {
         <div className="form-group">
           <label className="form-label">Тип операции</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className={`btn ${type === 'shipment' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ flex: 1 }}
-              onClick={() => setType('shipment')}
-            >
+            <button className={`btn ${type === 'shipment' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }} onClick={() => setType('shipment')}>
               Отгрузка
             </button>
-            <button
-              className={`btn ${type === 'receiving' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ flex: 1 }}
-              onClick={() => setType('receiving')}
-            >
+            <button className={`btn ${type === 'receiving' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }} onClick={() => setType('receiving')}>
               Приём
             </button>
           </div>
@@ -417,6 +454,39 @@ export default function AccountingPage() {
         const D = Number(pt.diameter)
         const S = Number(pt.thickness)
         const wpm = calculateWeight(D, S)
+        const isBatch = pt.mode === 'batch'
+
+        // Per-type mini summary
+        let ptSummary = null
+        if (isBatch) {
+          const filled = (pt.batches || []).filter(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
+          if (filled.length > 0) {
+            const ptPipes = filled.reduce((s, b) => s + Number(b.count), 0)
+            const ptLength = filled.reduce((s, b) => s + Number(b.totalLength), 0)
+            const ptWeight = filled.reduce((s, b) => s + Number(b.totalWeight), 0)
+            ptSummary = (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                <span>{ptPipes} шт</span><span>·</span>
+                <span>{ptLength.toFixed(2)} м</span><span>·</span>
+                <span style={{ color: 'var(--gold)' }}>{ptWeight.toFixed(3)} т</span>
+              </div>
+            )
+          }
+        } else {
+          const filledLengths = pt.lengths.filter(r => Number(r.length) > 0)
+          const ptPipes = filledLengths.length
+          const ptLength = filledLengths.reduce((s, r) => s + Number(r.length), 0)
+          const ptWeight = wpm * ptLength
+          if (ptPipes > 0 && wpm > 0) {
+            ptSummary = (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                <span>{ptPipes} шт</span><span>·</span>
+                <span>{ptLength.toFixed(2)} м</span><span>·</span>
+                <span style={{ color: 'var(--gold)' }}>{(ptWeight / 1000).toFixed(3)} т</span>
+              </div>
+            )
+          }
+        }
 
         return (
           <div className="card" key={pi}>
@@ -477,66 +547,126 @@ export default function AccountingPage() {
               <input type="text" placeholder="Напр. Ст20" value={pt.steelGrade} onChange={(e) => updatePipeType(pi, 'steelGrade', e.target.value)} />
             </div>
 
-            {wpm > 0 && (
+            {wpm > 0 && !isBatch && (
               <div className="result-row">
                 <span className="result-label">Вес п/м</span>
                 <span className="result-value">{wpm.toFixed(2)} кг/м</span>
               </div>
             )}
 
-            {/* Таблица длин */}
+            {/* Режим ввода */}
             <div className="divider" />
-            {(() => {
-              const filledLengths = pt.lengths.filter(r => Number(r.length) > 0)
-              const ptPipes = filledLengths.length
-              const ptLength = filledLengths.reduce((s, r) => s + Number(r.length), 0)
-              const ptWeight = wpm * ptLength
-              if (ptPipes > 0 && wpm > 0) {
-                return (
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                    <span>{ptPipes} шт</span>
-                    <span>·</span>
-                    <span>{ptLength.toFixed(2)} м</span>
-                    <span>·</span>
-                    <span style={{ color: 'var(--gold)' }}>{(ptWeight / 1000).toFixed(3)} т</span>
-                  </div>
-                )
-              }
-              return null
-            })()}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span className="form-label" style={{ marginBottom: 0 }}>Длины труб</span>
-              <span className="form-label" style={{ marginBottom: 0, color: 'var(--gold)' }}>
-                {pt.lengths.filter(r => Number(r.length) > 0).length} / {MAX_PIPE_ROWS}
-              </span>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              <button
+                className={`btn btn-sm ${!isBatch ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1 }}
+                onClick={() => setMode(pi, 'individual')}
+              >
+                По трубам
+              </button>
+              <button
+                className={`btn btn-sm ${isBatch ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ flex: 1 }}
+                onClick={() => setMode(pi, 'batch')}
+              >
+                Пачками
+              </button>
             </div>
 
-            <div className="length-table" style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-              {pt.lengths.map((row, ri) => (
-                <div key={row.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)', width: 24, textAlign: 'center', flexShrink: 0 }}>
-                    {ri + 1}
-                  </span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="Длина, м"
-                    value={row.length}
-                    onChange={(e) => updateLength(pi, ri, e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  {pt.lengths.length > 1 && (
-                    <button className="btn-icon btn-sm" onClick={() => removeLengthRow(pi, ri)} style={{ flexShrink: 0 }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  )}
+            {ptSummary}
+
+            {isBatch ? (
+              /* Таблица пачек */
+              <div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 4, paddingLeft: 30 }}>
+                  <span style={{ flex: 1, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center' }}>Кол-во, шт</span>
+                  <span style={{ flex: 1.5, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center' }}>Длина, м</span>
+                  <span style={{ flex: 1.5, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center' }}>Тоннаж, тн</span>
+                  <span style={{ width: 30 }} />
                 </div>
-              ))}
-            </div>
+                {pt.batches.map((b, bi) => (
+                  <div key={b.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)', width: 24, textAlign: 'center', flexShrink: 0 }}>
+                      {bi + 1}
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="шт"
+                      value={b.count}
+                      onChange={(e) => updateBatch(pi, bi, 'count', e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="м"
+                      value={b.totalLength}
+                      onChange={(e) => updateBatch(pi, bi, 'totalLength', e.target.value)}
+                      style={{ flex: 1.5 }}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      placeholder="тн"
+                      value={b.totalWeight}
+                      onChange={(e) => updateBatch(pi, bi, 'totalWeight', e.target.value)}
+                      style={{ flex: 1.5 }}
+                    />
+                    {pt.batches.length > 1 && (
+                      <button className="btn-icon btn-sm" onClick={() => removeBatchRow(pi, bi)} style={{ flexShrink: 0 }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 4 }} onClick={() => addBatchRow(pi)}>
+                  + Добавить пачку
+                </button>
+              </div>
+            ) : (
+              /* Таблица индивидуальных длин */
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span className="form-label" style={{ marginBottom: 0 }}>Длины труб</span>
+                  <span className="form-label" style={{ marginBottom: 0, color: 'var(--gold)' }}>
+                    {pt.lengths.filter(r => Number(r.length) > 0).length} / {MAX_PIPE_ROWS}
+                  </span>
+                </div>
+                <div className="length-table" style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                  {pt.lengths.map((row, ri) => (
+                    <div key={row.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)', width: 24, textAlign: 'center', flexShrink: 0 }}>
+                        {ri + 1}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="Длина, м"
+                        value={row.length}
+                        onChange={(e) => updateLength(pi, ri, e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      {pt.lengths.length > 1 && (
+                        <button className="btn-icon btn-sm" onClick={() => removeLengthRow(pi, ri)} style={{ flexShrink: 0 }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )
       })}

@@ -69,6 +69,43 @@ function generateDocumentHtml(doc) {
     const D = Number(pt.diameter)
     const S = Number(pt.thickness)
     const wpm = D > S ? 0.02466 * S * (D - S) : 0
+    const header = `${escapeHtml(pt.gost || '—')} &nbsp; Ø${escapeHtml(pt.diameter)}×${escapeHtml(pt.thickness)} мм${pt.steelGrade ? ' &nbsp; ' + escapeHtml(pt.steelGrade) : ''}`
+
+    if (pt.mode === 'batch') {
+      const batches = (pt.batches || []).filter(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
+      if (batches.length === 0) return ''
+      let totalCnt = 0, totalLen = 0, totalWt = 0
+      const rows = batches.map((b, i) => {
+        const cnt = Number(b.count); const len = Number(b.totalLength); const wt = Number(b.totalWeight)
+        totalCnt += cnt; totalLen += len; totalWt += wt
+        return `<tr>
+          <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${cnt}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${len.toFixed(2)}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${wt.toFixed(3)}</td>
+        </tr>`
+      }).join('')
+      return `
+        <div style="margin-bottom:12px;">
+          <p style="font-weight:600;margin-bottom:4px;font-size:11px;">${header}</p>
+          <table style="width:auto;border-collapse:collapse;font-size:10px;">
+            <thead><tr style="background:#f0f0f0;">
+              <th style="padding:2px 6px;border:1px solid #ccc;">№</th>
+              <th style="padding:2px 6px;border:1px solid #ccc;">Кол-во, шт</th>
+              <th style="padding:2px 6px;border:1px solid #ccc;">Длина, м</th>
+              <th style="padding:2px 6px;border:1px solid #ccc;">Тоннаж, тн</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+            <tfoot><tr style="font-weight:600;background:#f9f9f9;">
+              <td style="padding:2px 6px;border:1px solid #ccc;">Итого:</td>
+              <td style="padding:2px 6px;border:1px solid #ccc;">${totalCnt} шт</td>
+              <td style="padding:2px 6px;border:1px solid #ccc;">${totalLen.toFixed(2)} м</td>
+              <td style="padding:2px 6px;border:1px solid #ccc;">${totalWt.toFixed(3)} тн</td>
+            </tr></tfoot>
+          </table>
+        </div>`
+    }
+
     const lengths = (pt.lengths || []).filter(r => Number(r.length) > 0)
     if (lengths.length === 0) return ''
 
@@ -87,9 +124,7 @@ function generateDocumentHtml(doc) {
     return `
       <div style="margin-bottom:12px;">
         <p style="font-weight:600;margin-bottom:4px;font-size:11px;">
-          ${escapeHtml(pt.gost || '—')} &nbsp; Ø${escapeHtml(pt.diameter)}×${escapeHtml(pt.thickness)} мм
-          ${pt.steelGrade ? '&nbsp; ' + escapeHtml(pt.steelGrade) : ''}
-          &nbsp;&nbsp; Вес п/м: ${wpm.toFixed(3)} кг/м
+          ${header} &nbsp;&nbsp; Вес п/м: ${wpm.toFixed(3)} кг/м
         </p>
         <table style="width:auto;border-collapse:collapse;font-size:10px;">
           <thead>

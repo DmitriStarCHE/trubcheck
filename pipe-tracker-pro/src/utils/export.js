@@ -56,24 +56,41 @@ export function exportToExcel(documents) {
       const D = Number(pt.diameter)
       const S = Number(pt.thickness)
       const wpm = D > S ? 0.02466 * S * (D - S) : 0
+      const pipeLabel = [pt.gost || '—', `Ø${pt.diameter}×${pt.thickness} мм`, pt.steelGrade || ''].filter(Boolean).join('   ')
+
+      if (pt.mode === 'batch') {
+        const batches = (pt.batches || []).filter(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
+        if (!batches.length) continue
+
+        r = rows.length
+        rows.push([pipeLabel, '', '', '', '', ''])
+        merges.push({ s: { r, c: 0 }, e: { r, c: 5 } })
+        rows.push(['№', 'Кол-во, шт', 'Длина, м', 'Тоннаж, тн', '', ''])
+
+        let totalCnt = 0, totalLen = 0, totalWt = 0
+        batches.forEach((b, i) => {
+          const cnt = Number(b.count); const len = Number(b.totalLength); const wt = Number(b.totalWeight)
+          totalCnt += cnt; totalLen += len; totalWt += wt
+          rows.push([i + 1, cnt, parseFloat(len.toFixed(3)), parseFloat(wt.toFixed(3)), '', ''])
+        })
+
+        r = rows.length
+        rows.push([`Итого: ${totalCnt} шт`, '', parseFloat(totalLen.toFixed(3)), parseFloat(totalWt.toFixed(3)), '', ''])
+        merges.push({ s: { r, c: 0 }, e: { r, c: 1 } })
+        rows.push([''])
+        continue
+      }
+
       const lengths = (pt.lengths || []).filter(row => Number(row.length) > 0)
       if (!lengths.length) continue
 
-      // Pipe type header row
       r = rows.length
-      const pipeLabel = [
-        pt.gost || '—',
-        `Ø${pt.diameter}×${pt.thickness} мм`,
-        pt.steelGrade || '',
-      ].filter(Boolean).join('   ')
       rows.push([pipeLabel, '', '', '', `Вес п/м: ${wpm.toFixed(3)} кг/м`, ''])
       merges.push({ s: { r, c: 0 }, e: { r, c: 3 } })
       merges.push({ s: { r, c: 4 }, e: { r, c: 5 } })
 
-      // Column headers
       rows.push(['№', 'Длина, м', 'Масса, кг', '', '', ''])
 
-      // Length rows
       let subtotalLen = 0
       let subtotalWeight = 0
       lengths.forEach((row, i) => {
@@ -84,16 +101,9 @@ export function exportToExcel(documents) {
         rows.push([i + 1, parseFloat(l.toFixed(3)), parseFloat(mass.toFixed(3)), '', '', ''])
       })
 
-      // Subtotal
       r = rows.length
-      rows.push([
-        `Итого: ${lengths.length} шт`,
-        parseFloat(subtotalLen.toFixed(3)),
-        parseFloat(subtotalWeight.toFixed(3)),
-        '', '', ''
-      ])
+      rows.push([`Итого: ${lengths.length} шт`, parseFloat(subtotalLen.toFixed(3)), parseFloat(subtotalWeight.toFixed(3)), '', '', ''])
       merges.push({ s: { r, c: 0 }, e: { r, c: 0 } })
-
       rows.push([''])
     }
 
