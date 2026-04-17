@@ -157,10 +157,23 @@ function createDocElement(docData) {
   return element
 }
 
+function buildPdfFilename(docData) {
+  const date = docData.date
+    ? new Date(docData.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
+    : ''
+  const pipes = (docData.pipeTypes || [])
+    .filter(pt => pt.diameter && pt.thickness)
+    .map(pt => `${pt.diameter}x${pt.thickness}`)
+    .slice(0, 2)
+    .join('_')
+  const parts = [date, pipes].filter(Boolean)
+  return `${parts.join('_') || `document-${docData.id || Date.now()}`}.pdf`
+}
+
 function getDocOpt(docData) {
   return {
     margin: 0,
-    filename: `document-${docData.id || Date.now()}.pdf`,
+    filename: buildPdfFilename(docData),
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
