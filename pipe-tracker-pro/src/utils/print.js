@@ -52,10 +52,177 @@ export async function printCalculation(data) {
   html2pdf().from(element).set(opt).save();
 }
 
-// Note: printDocument is not fully implemented with the new method yet.
-// This is a placeholder to avoid breaking the app.
-// We will need to create generateDocumentHtml similar to generateCalculationHtml
-export async function printDocument(docData) {
-  console.log("printDocument function needs to be updated to use html2pdf.js");
-  alert("Функция печати документа еще не обновлена.");
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
+
+function generateDocumentHtml(doc) {
+  const title = doc.type === 'shipment' ? 'НАКЛАДНАЯ НА ОТГРУЗКУ' : 'ПРИЁМНЫЙ АКТ'
+  const docNum = doc.id ? escapeHtml(doc.id.slice(-8).toUpperCase()) : '—'
+
+  const pipeTablesHtml = (doc.pipeTypes || []).map(pt => {
+    const D = Number(pt.diameter)
+    const S = Number(pt.thickness)
+    const wpm = D > S ? 0.02466 * S * (D - S) : 0
+    const lengths = (pt.lengths || []).filter(r => Number(r.length) > 0)
+    if (lengths.length === 0) return ''
+
+    let subtotalLen = 0
+    let subtotalWeight = 0
+    const rows = lengths.map((r, i) => {
+      const l = Number(r.length)
+      subtotalLen += l
+      subtotalWeight += wpm * l
+      return `<tr>
+        <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
+        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${l.toFixed(2)}</td>
+      </tr>`
+    }).join('')
+
+    return `
+      <div style="margin-bottom:12px;">
+        <p style="font-weight:600;margin-bottom:4px;font-size:11px;">
+          ${escapeHtml(pt.gost || '—')} &nbsp; Ø${escapeHtml(pt.diameter)}×${escapeHtml(pt.thickness)} мм
+          ${pt.steelGrade ? '&nbsp; ' + escapeHtml(pt.steelGrade) : ''}
+          &nbsp;&nbsp; Вес п/м: ${wpm.toFixed(3)} кг/м
+        </p>
+        <table style="width:auto;border-collapse:collapse;font-size:10px;">
+          <thead>
+            <tr style="background:#f0f0f0;">
+              <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">№</th>
+              <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">Длина, м</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr style="font-weight:600;background:#f9f9f9;">
+              <td style="padding:2px 6px;border:1px solid #ccc;">Итого: ${lengths.length} шт</td>
+              <td style="padding:2px 6px;border:1px solid #ccc;">${subtotalLen.toFixed(2)} м / ${subtotalWeight.toFixed(3)} кг</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`
+  }).join('')
+
+  const detailRows = [
+    doc.date ? `<tr><td style="padding:3px 6px;color:#555;width:40%;">Дата:</td><td style="padding:3px 6px;">${escapeHtml(formatDate(doc.date))}</td></tr>` : '',
+    doc.counterparty ? `<tr><td style="padding:3px 6px;color:#555;">Контрагент:</td><td style="padding:3px 6px;">${escapeHtml(doc.counterparty)}</td></tr>` : '',
+    doc.location ? `<tr><td style="padding:3px 6px;color:#555;">Место:</td><td style="padding:3px 6px;">${escapeHtml(doc.location)}</td></tr>` : '',
+    doc.vehicle ? `<tr><td style="padding:3px 6px;color:#555;">Авто / Водитель:</td><td style="padding:3px 6px;">${escapeHtml(doc.vehicle)}</td></tr>` : '',
+    doc.note ? `<tr><td style="padding:3px 6px;color:#555;">Примечание:</td><td style="padding:3px 6px;">${escapeHtml(doc.note)}</td></tr>` : '',
+  ].filter(Boolean).join('')
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#222;padding:20px 24px;width:210mm;box-sizing:border-box;">
+      <div style="text-align:center;margin-bottom:18px;">
+        <h2 style="margin:0;font-size:18px;letter-spacing:1px;">${escapeHtml(title)}</h2>
+        <p style="margin:4px 0 0;font-size:12px;color:#666;">№ ${docNum} &nbsp;|&nbsp; ${doc.date ? escapeHtml(formatDate(doc.date)) : '—'}</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px;">
+        <tbody>${detailRows}</tbody>
+      </table>
+      <hr style="border:0;border-top:1px solid #ddd;margin-bottom:16px;" />
+      ${pipeTablesHtml}
+      <hr style="border:0;border-top:2px solid #333;margin:16px 0 10px;" />
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+        <tbody>
+          <tr style="font-weight:600;">
+            <td style="padding:4px 8px;border:1px solid #ccc;">Всего труб:</td>
+            <td style="padding:4px 8px;border:1px solid #ccc;">${doc.totalPipes || 0} шт</td>
+            <td style="padding:4px 8px;border:1px solid #ccc;">Общая длина:</td>
+            <td style="padding:4px 8px;border:1px solid #ccc;">${(doc.totalLength || 0).toFixed(2)} м</td>
+            <td style="padding:4px 8px;border:1px solid #ccc;">Тоннаж:</td>
+            <td style="padding:4px 8px;border:1px solid #ccc;">${((doc.totalWeight || 0) / 1000).toFixed(3)} т</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;margin-top:32px;font-size:12px;">
+        <div>Сдал: ______________________ / ___________</div>
+        <div>Принял: ______________________ / ___________</div>
+      </div>
+      <p style="font-size:10px;color:#aaa;margin-top:20px;">Сформировано: ${escapeHtml(formatDate(new Date()))}</p>
+    </div>`
+}
+
+function createDocElement(docData) {
+  const element = document.createElement('div')
+  const safeHtml = generateDocumentHtml(docData)
+  // Content is generated from app's own stored data with all strings escaped via escapeHtml
+  element.innerHTML = safeHtml // eslint-disable-line -- user data is escaped above
+  return element
+}
+
+function getDocOpt(docData) {
+  return {
+    margin: 0,
+    filename: `document-${docData.id || Date.now()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+  }
+}
+
+export async function printDocument(docData) {
+  try {
+    const element = createDocElement(docData)
+    document.body.appendChild(element)
+    await html2pdf().from(element).set(getDocOpt(docData)).save()
+    document.body.removeChild(element)
+  } catch (err) {
+    console.error('printDocument error:', err)
+    throw err
+  }
+}
+
+export async function getDocumentBlob(docData, format = 'pdf') {
+  const element = createDocElement(docData)
+  document.body.appendChild(element)
+  try {
+    if (format === 'image') {
+      const { default: html2canvasMod } = await import('html2canvas')
+      const canvas = await html2canvasMod(element, { scale: 2, useCORS: true })
+      document.body.removeChild(element)
+      return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    }
+    const blob = await html2pdf().from(element).set(getDocOpt(docData)).outputPdf('blob')
+    document.body.removeChild(element)
+    return blob
+  } catch (err) {
+    document.body.removeChild(element)
+    throw err
+  }
+}
+
+// Returns true if native share dialog opened, false if fell back to new tab
+// photos: array of { dataUrl, label }
+export async function shareDocument(docData, photos = []) {
+  const blob = await getDocumentBlob(docData, 'pdf')
+  const pdfFile = new File([blob], `document-${docData.id || Date.now()}.pdf`, { type: 'application/pdf' })
+
+  const photoFiles = photos.map((p, i) => {
+    const base64 = p.dataUrl.split(',')[1]
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    return new File([bytes], `photo-${i + 1}-${escapeHtml(p.label)}.jpg`, { type: 'image/jpeg' })
+  })
+
+  const allFiles = [pdfFile, ...photoFiles]
+  const title = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
+
+  if (navigator.canShare && navigator.canShare({ files: allFiles })) {
+    await navigator.share({ title, files: allFiles })
+    return true
+  }
+
+  // Fallback: open PDF in new tab (photos can't be auto-shared without HTTPS)
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 30000)
+  return false
+}
+
+export { generateDocumentHtml, escapeHtml }

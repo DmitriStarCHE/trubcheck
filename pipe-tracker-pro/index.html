@@ -4,20 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#2C3531" />
+    <meta name="theme-color" content="#09141A" />
     <meta name="description" content="Pipe Tracker Pro — учёт отгрузки и приёма стальных труб" />
     <title>Pipe Tracker Pro</title>
     <script>
       // Load Google Fonts async — never blocks rendering
-      if ('fonts' in document) {
-        Promise.allSettled([
-          document.fonts.load('700 1em "Montserrat"'),
-          document.fonts.load('1em "Inter"'),
-        ])
-      }
       const link = document.createElement('link')
       link.rel = 'stylesheet'
-      link.href = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Inter:wght@300;400;500;600;700&display=swap'
+      link.href = 'https://fonts.googleapis.com/css2?family=Poiret+One&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap'
       link.media = 'none'
       link.onload = function() { this.media = 'all' }
       document.head.appendChild(link)

@@ -1,59 +1,110 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getAllDocuments, deleteDocument, getDocument } from '../db'
 
 export default function HistoryPage() {
+  const navigate = useNavigate()
   const [documents, setDocuments] = useState([])
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [selectedDoc, setSelectedDoc] = useState(null)
   const [viewMode, setViewMode] = useState('list')
+  const [error, setError] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     loadDocuments()
   }, [])
 
   const loadDocuments = async () => {
-    const docs = await getAllDocuments()
-    setDocuments(docs)
+    try {
+      const docs = await getAllDocuments()
+      setDocuments(docs)
+    } catch (err) {
+      setError('Не удалось загрузить документы: ' + err.message)
+    }
   }
 
   const filteredDocs = documents.filter(doc => {
     if (filter === 'shipment' && doc.type !== 'shipment') return false
     if (filter === 'receiving' && doc.type !== 'receiving') return false
     if (search && !doc.counterparty?.toLowerCase().includes(search.toLowerCase())) return false
+    if (dateFrom && doc.date < dateFrom) return false
+    if (dateTo && doc.date > dateTo) return false
     return true
   })
 
+  const hasActiveFilter = Boolean(dateFrom || dateTo || search || filter !== 'all')
+
+  const resetFilters = () => {
+    setSearch('')
+    setDateFrom('')
+    setDateTo('')
+    setFilter('all')
+  }
+
   const handleDelete = async (id) => {
-    if (confirm('Удалить этот документ?')) {
+    if (!confirm('Удалить этот документ?')) return
+    try {
       await deleteDocument(id)
       loadDocuments()
       if (selectedDoc?.id === id) {
         setSelectedDoc(null)
         setViewMode('list')
       }
+    } catch (err) {
+      setError('Не удалось удалить документ: ' + err.message)
     }
   }
 
   const handleView = async (id) => {
-    const doc = await getDocument(id)
-    setSelectedDoc(doc)
-    setViewMode('detail')
+    try {
+      const doc = await getDocument(id)
+      setSelectedDoc(doc)
+      setViewMode('detail')
+    } catch (err) {
+      setError('Не удалось открыть документ: ' + err.message)
+    }
   }
 
   const handlePrint = async () => {
     if (!selectedDoc) return
-    const { printDocument } = await import('../utils/print')
-    await printDocument(selectedDoc)
+    setIsExporting(true)
+    setError(null)
+    try {
+      const { printDocument } = await import('../utils/print')
+      await printDocument(selectedDoc)
+    } catch (err) {
+      setError('Ошибка при генерации PDF: ' + err.message)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleExport = async () => {
-    const { exportToExcel } = await import('../utils/export')
-    exportToExcel(documents)
+    setIsExporting(true)
+    setError(null)
+    try {
+      const { exportToExcel } = await import('../utils/export')
+      exportToExcel(documents)
+    } catch (err) {
+      setError('Ошибка при экспорте: ' + err.message)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
     <div className="page-enter">
+
+      {error && (
+        <div className="error-banner">
+          <span style={{ flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       {viewMode === 'list' && (
         <>
@@ -67,7 +118,17 @@ export default function HistoryPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="form-row" style={{ marginBottom: 10 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Дата с</label>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Дата по</label>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button
                 className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilter('all')}
@@ -86,6 +147,11 @@ export default function HistoryPage() {
               >
                 Приём
               </button>
+              {hasActiveFilter && (
+                <button className="btn btn-sm btn-danger" onClick={resetFilters} style={{ marginLeft: 'auto' }}>
+                  Сбросить фильтры
+                </button>
+              )}
             </div>
           </div>
 
@@ -126,6 +192,9 @@ export default function HistoryPage() {
                   <button className="btn btn-secondary btn-sm" style={{ flex: 1, borderRadius: 0 }} onClick={() => handleView(doc.id)}>
                     Просмотр
                   </button>
+                  <button className="btn btn-secondary btn-sm" style={{ flex: 1, borderRadius: 0 }} onClick={() => navigate(`/accounting/edit/${doc.id}`)}>
+                    Изменить
+                  </button>
                   <button className="btn btn-danger btn-sm" style={{ flex: 1, borderRadius: 0 }} onClick={() => handleDelete(doc.id)}>
                     Удалить
                   </button>
@@ -136,13 +205,13 @@ export default function HistoryPage() {
 
           {/* Экспорт */}
           {documents.length > 0 && (
-            <button className="btn btn-gold" style={{ width: '100%', marginTop: 8 }} onClick={handleExport}>
+            <button className="btn btn-gold" style={{ width: '100%', marginTop: 8 }} onClick={handleExport} disabled={isExporting}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Экспорт в Excel
+              {isExporting ? 'Экспорт...' : 'Экспорт в Excel'}
             </button>
           )}
         </>
@@ -153,14 +222,16 @@ export default function HistoryPage() {
           doc={selectedDoc}
           onBack={() => { setViewMode('list'); setSelectedDoc(null) }}
           onPrint={handlePrint}
+          onEdit={() => navigate(`/accounting/edit/${selectedDoc.id}`)}
           onDelete={() => handleDelete(selectedDoc.id)}
+          isExporting={isExporting}
         />
       )}
     </div>
   )
 }
 
-function DocumentDetail({ doc, onBack, onPrint, onDelete }) {
+function DocumentDetail({ doc, onBack, onPrint, onEdit, onDelete, isExporting }) {
   return (
     <div className="page-enter">
       <button className="btn btn-secondary btn-sm" onClick={onBack} style={{ marginBottom: 12 }}>
@@ -236,7 +307,7 @@ function DocumentDetail({ doc, onBack, onPrint, onDelete }) {
         </div>
         <div className="result-row">
           <span className="result-label">Общая длина</span>
-          <span className="result-value">{doc.totalLength?.toFixed(1)} м</span>
+          <span className="result-value">{doc.totalLength?.toFixed(2)} м</span>
         </div>
         <div className="result-row">
           <span className="result-label">Общий тоннаж</span>
@@ -245,13 +316,16 @@ function DocumentDetail({ doc, onBack, onPrint, onDelete }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={onPrint}>
+        <button className="btn btn-primary" style={{ flex: 1 }} onClick={onPrint} disabled={isExporting}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
             <polyline points="6 9 6 2 18 2 18 9" />
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
             <rect x="6" y="14" width="12" height="8" />
           </svg>
-          Печать / PDF
+          {isExporting ? 'Генерация...' : 'Печать / PDF'}
+        </button>
+        <button className="btn btn-secondary" onClick={onEdit}>
+          Изменить
         </button>
         <button className="btn btn-danger" onClick={onDelete}>
           Удалить

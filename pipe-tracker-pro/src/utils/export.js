@@ -44,5 +44,10 @@ export function exportToExcel(documents) {
     { wch: 10 }, { wch: 10 }, { wch: 20 },
   ]
 
-  XLSX.writeFile(wb, `pipe-tracker-export-${Date.now()}.xlsx`)
+  try {
+    XLSX.writeFile(wb, `pipe-tracker-export-${Date.now()}.xlsx`)
+  } catch (err) {
+    console.error('exportToExcel error:', err)
+    throw err
+  }
 }

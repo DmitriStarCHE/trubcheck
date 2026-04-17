@@ -30,8 +30,10 @@ export default function CalculatorPage() {
     setQuantity('')
   }
 
+  const dInvalid = diameter && thickness && Number(diameter) <= Number(thickness)
+
   const handlePrint = async () => {
-    if (weightPerMeter <= 0) return
+    if (weightPerMeter <= 0 || dInvalid) return
     const { printCalculation } = await import('../utils/print')
     await printCalculation({
       gost,
@@ -47,7 +49,7 @@ export default function CalculatorPage() {
   }
 
   const handleShare = async () => {
-    if (weightPerMeter <= 0) return
+    if (weightPerMeter <= 0 || dInvalid) return
 
     const shareData = {
       title: 'Расчет труб',
@@ -102,7 +104,8 @@ ${quantity > 1 ? `Общий тоннаж: ${(totalWeight / 1000).toFixed(3)} т
           </div>
           <div className="form-group">
             <label className="form-label">Толщина стенки, мм</label>
-            <input type="number" min="0" step="0.1" placeholder="Напр. 4.5" value={thickness} onChange={(e) => setThickness(e.target.value)} />
+            <input type="number" min="0" step="0.1" placeholder="Напр. 4.5" value={thickness} className={dInvalid ? 'input-error' : ''} onChange={(e) => setThickness(e.target.value)} />
+            {dInvalid && <span className="field-error">Диаметр должен быть больше толщины (D &gt; S)</span>}
           </div>
         </div>
 

@@ -17,6 +17,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Suspense fallback={<LoadingFallback />}><CalculatorPage /></Suspense> },
       { path: 'accounting', element: <Suspense fallback={<LoadingFallback />}><AccountingPage /></Suspense> },
+      { path: 'accounting/edit/:id', element: <Suspense fallback={<LoadingFallback />}><AccountingPage /></Suspense> },
       { path: 'history', element: <Suspense fallback={<LoadingFallback />}><HistoryPage /></Suspense> },
     ],
   },

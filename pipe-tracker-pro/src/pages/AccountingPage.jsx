@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { GOST_DATA, calculateWeight } from '../data/gost'
-import { saveDocument, getAllCounterparties } from '../db'
+import { saveDocument, updateDocument, getDocument, getAllCounterparties } from '../db'
+import { randomUUID } from '../utils/uuid'
 
 const MAX_PIPE_ROWS = 60
 
 export default function AccountingPage() {
   const navigate = useNavigate()
+  const { id: editId } = useParams()
+  const isEditMode = Boolean(editId)
   const today = new Date().toISOString().split('T')[0]
 
   const [type, setType] = useState('shipment')
@@ -16,16 +19,90 @@ export default function AccountingPage() {
   const [counterparties, setCounterparties] = useState([])
   const [vehicle, setVehicle] = useState('')
   const [note, setNote] = useState('')
+  const [docId, setDocId] = useState(null)
 
   const [pipeTypes, setPipeTypes] = useState([
-    { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: crypto.randomUUID(), length: '' }] }
+    { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: randomUUID(), length: '' }] }
   ])
 
+  const [photos, setPhotos] = useState([])
+
+  const [error, setError] = useState(null)
+  const [info, setInfo] = useState(null)
+  const [errors, setErrors] = useState({})
+  const [isExporting, setIsExporting] = useState(false)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+
   useEffect(() => {
-    getAllCounterparties().then((list) => setCounterparties(list.map(c => c.name)))
+    getAllCounterparties()
+      .then(list => setCounterparties(list.map(c => c.name)))
+      .catch(err => setError('Не удалось загрузить контрагентов: ' + err.message))
   }, [])
 
+  useEffect(() => {
+    if (!isEditMode) return
+    getDocument(editId)
+      .then(doc => {
+        if (!doc) return
+        setDocId(doc.id)
+        setType(doc.type || 'shipment')
+        setDate(doc.date || today)
+        setLocation(doc.location || '')
+        setCounterparty(doc.counterparty || '')
+        setVehicle(doc.vehicle || '')
+        setNote(doc.note || '')
+        if (doc.pipeTypes?.length) setPipeTypes(doc.pipeTypes)
+        if (doc.photos?.length) setPhotos(doc.photos)
+      })
+      .catch(err => setError('Не удалось загрузить документ: ' + err.message))
+  }, [editId, isEditMode])
+
   const gostKeys = Object.keys(GOST_DATA)
+
+  const compressImage = (file) => new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      const MAX = 1400
+      let w = img.width, h = img.height
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+        else { w = Math.round(w * MAX / h); h = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => URL.revokeObjectURL(objectUrl)
+    img.src = objectUrl
+  })
+
+  const handlePhotoAdd = (label) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+      try {
+        const dataUrl = await compressImage(file)
+        setPhotos(prev => {
+          const existing = prev.findIndex(p => p.label === label)
+          if (existing >= 0) {
+            const updated = [...prev]
+            updated[existing] = { ...updated[existing], dataUrl }
+            return updated
+          }
+          return [...prev, { id: randomUUID(), dataUrl, label }]
+        })
+      } catch { setError('Не удалось загрузить фото') }
+    }
+    input.click()
+  }
+
+  const handlePhotoRemove = (id) => setPhotos(prev => prev.filter(p => p.id !== id))
 
   const totals = useMemo(() => {
     let totalPipes = 0
@@ -50,8 +127,17 @@ export default function AccountingPage() {
     return { totalPipes, totalLength, totalWeight }
   }, [pipeTypes])
 
+  const validate = () => {
+    const errs = {}
+    if (!counterparty.trim()) errs.counterparty = 'Укажите контрагента'
+    if (!date) errs.date = 'Укажите дату'
+    if (totals.totalPipes === 0) errs.pipes = 'Добавьте хотя бы одну трубу с длиной > 0'
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
+
   const addPipeType = () => {
-    setPipeTypes([...pipeTypes, { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: crypto.randomUUID(), length: '' }] }])
+    setPipeTypes([...pipeTypes, { gost: '', diameter: '', thickness: '', steelGrade: '', lengths: [{ id: randomUUID(), length: '' }] }])
   }
 
   const removePipeType = (index) => {
@@ -72,68 +158,140 @@ export default function AccountingPage() {
     setPipeTypes(updated)
   }
 
-  const addLengthRow = (pipeIndex) => {
-    if (totals.totalPipes >= MAX_PIPE_ROWS) return
-    const updated = [...pipeTypes]
-    updated[pipeIndex].lengths.push({ id: crypto.randomUUID(), length: '' })
-    setPipeTypes(updated)
-  }
-
   const removeLengthRow = (pipeIndex, rowIndex) => {
-    const updated = [...pipeTypes]
-    updated[pipeIndex].lengths = updated[pipeIndex].lengths.filter((_, i) => i !== rowIndex)
+    const pt = pipeTypes[pipeIndex]
+    if (pt.lengths.length <= 1) return
+    const updated = pipeTypes.map((p, i) =>
+      i === pipeIndex ? { ...p, lengths: p.lengths.filter((_, ri) => ri !== rowIndex) } : p
+    )
     setPipeTypes(updated)
   }
 
   const updateLength = (pipeIndex, rowIndex, value) => {
-    const updated = [...pipeTypes]
-    updated[pipeIndex].lengths[rowIndex].length = value
+    const updated = pipeTypes.map((p, i) => {
+      if (i !== pipeIndex) return p
+      const newLengths = p.lengths.map((r, ri) =>
+        ri === rowIndex ? { ...r, length: value } : r
+      )
+      // Auto-add a new empty row when typing in the last row
+      if (rowIndex === newLengths.length - 1 && value !== '') {
+        newLengths.push({ id: randomUUID(), length: '' })
+      }
+      return { ...p, lengths: newLengths }
+    })
     setPipeTypes(updated)
   }
 
+  const buildDocData = () => ({
+    id: docId || 'preview',
+    type,
+    date,
+    counterparty,
+    location,
+    vehicle,
+    note,
+    pipeTypes: pipeTypes.map(pt => {
+      const D = Number(pt.diameter)
+      const S = Number(pt.thickness)
+      return { ...pt, weightPerMeter: calculateWeight(D, S) }
+    }),
+    ...totals,
+  })
+
   const handleSave = async () => {
-    const doc = {
-      id: crypto.randomUUID(),
-      type,
-      date,
-      location,
-      counterparty,
-      vehicle,
-      note,
-      pipeTypes,
-      totalPipes: totals.totalPipes,
-      totalLength: totals.totalLength,
-      totalWeight: totals.totalWeight,
+    if (!validate()) return
+    setError(null)
+    try {
+      const doc = {
+        type,
+        date,
+        location,
+        counterparty,
+        vehicle,
+        note,
+        pipeTypes,
+        totalPipes: totals.totalPipes,
+        totalLength: totals.totalLength,
+        totalWeight: totals.totalWeight,
+      }
+      doc.photos = photos
+      if (isEditMode) {
+        doc.id = docId || editId
+        await updateDocument(doc)
+      } else {
+        await saveDocument(doc)
+      }
+      navigate('/history')
+    } catch (err) {
+      setError('Не удалось сохранить документ: ' + err.message)
     }
-    await saveDocument(doc)
-    navigate('/history')
   }
 
   const handlePrint = async () => {
-    const enrichedPipeTypes = pipeTypes.map(pt => {
-      const D = Number(pt.diameter)
-      const S = Number(pt.thickness)
-      return {
-        ...pt,
-        weightPerMeter: calculateWeight(D, S),
+    setIsExporting(true)
+    setError(null)
+    try {
+      const { printDocument } = await import('../utils/print')
+      await printDocument(buildDocData())
+    } catch (err) {
+      setError('Ошибка при генерации PDF: ' + err.message)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleShare = async () => {
+    setIsExporting(true)
+    setError(null)
+    setInfo(null)
+    try {
+      const { shareDocument } = await import('../utils/print')
+      const shared = await shareDocument(buildDocData(), photos)
+      if (!shared) {
+        setInfo('PDF открыт в браузере. Нажмите ⋮ → «Поделиться» чтобы отправить файл.')
       }
-    })
-    const { printDocument } = await import('../utils/print')
-    await printDocument({
-      id: 'preview',
-      type,
-      date,
-      counterparty,
-      location,
-      vehicle,
-      note,
-      pipeTypes: enrichedPipeTypes,
-      ...totals,
-    })
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setError('Ошибка при отправке: ' + err.message)
+      }
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handlePreview = async () => {
+    setError(null)
+    setIsPreviewing(true)
+    try {
+      const { generateDocumentHtml } = await import('../utils/print')
+      const body = generateDocumentHtml(buildDocData())
+      const fullHtml = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Предпросмотр</title></head><body style="margin:0;padding:0">${body}</body></html>`
+      const blob = new Blob([fullHtml], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (err) {
+      setError('Ошибка предпросмотра: ' + err.message)
+    } finally {
+      setIsPreviewing(false)
+    }
   }
 
   return (
     <div className="page-enter">
+
+      {error && (
+        <div className="error-banner">
+          <span style={{ flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      {info && (
+        <div className="info-banner">
+          <span style={{ flex: 1 }}>{info}</span>
+          <button onClick={() => setInfo(null)}>×</button>
+        </div>
+      )}
 
       {/* Шапка документа */}
       <div className="card">
@@ -144,7 +302,7 @@ export default function AccountingPage() {
               <polyline points="14 2 14 8 20 8" />
             </svg>
           </div>
-          <div className="card-title">Шапка документа</div>
+          <div className="card-title">{isEditMode ? 'Редактирование документа' : 'Шапка документа'}</div>
         </div>
 
         <div className="form-group">
@@ -170,7 +328,13 @@ export default function AccountingPage() {
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Дата</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input
+              type="date"
+              value={date}
+              className={errors.date ? 'input-error' : ''}
+              onChange={(e) => { setDate(e.target.value); setErrors(prev => ({ ...prev, date: null })) }}
+            />
+            {errors.date && <span className="field-error">{errors.date}</span>}
           </div>
           <div className="form-group">
             <label className="form-label">Место погрузки/выгрузки</label>
@@ -185,8 +349,10 @@ export default function AccountingPage() {
             list="counterparties-list"
             placeholder="Название компании"
             value={counterparty}
-            onChange={(e) => setCounterparty(e.target.value)}
+            className={errors.counterparty ? 'input-error' : ''}
+            onChange={(e) => { setCounterparty(e.target.value); setErrors(prev => ({ ...prev, counterparty: null })) }}
           />
+          {errors.counterparty && <span className="field-error">{errors.counterparty}</span>}
           <datalist id="counterparties-list">
             {counterparties.map(c => <option key={c} value={c} />)}
           </datalist>
@@ -237,17 +403,31 @@ export default function AccountingPage() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Диаметр, мм</label>
-                <select value={pt.diameter} onChange={(e) => updatePipeType(pi, 'diameter', e.target.value)}>
-                  <option value="">— Ø —</option>
-                  {diameters.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="— Ø —"
+                  value={pt.diameter}
+                  list={`diameters-${pi}`}
+                  onChange={(e) => updatePipeType(pi, 'diameter', e.target.value)}
+                />
+                <datalist id={`diameters-${pi}`}>
+                  {diameters.map(d => <option key={d} value={d} />)}
+                </datalist>
               </div>
               <div className="form-group">
                 <label className="form-label">Толщина, мм</label>
-                <select value={pt.thickness} onChange={(e) => updatePipeType(pi, 'thickness', e.target.value)}>
-                  <option value="">— S —</option>
-                  {thicknesses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="— S —"
+                  value={pt.thickness}
+                  list={`thicknesses-${pi}`}
+                  onChange={(e) => updatePipeType(pi, 'thickness', e.target.value)}
+                />
+                <datalist id={`thicknesses-${pi}`}>
+                  {thicknesses.map(s => <option key={s} value={s} />)}
+                </datalist>
               </div>
             </div>
 
@@ -265,6 +445,24 @@ export default function AccountingPage() {
 
             {/* Таблица длин */}
             <div className="divider" />
+            {(() => {
+              const filledLengths = pt.lengths.filter(r => Number(r.length) > 0)
+              const ptPipes = filledLengths.length
+              const ptLength = filledLengths.reduce((s, r) => s + Number(r.length), 0)
+              const ptWeight = wpm * ptLength
+              if (ptPipes > 0 && wpm > 0) {
+                return (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <span>{ptPipes} шт</span>
+                    <span>·</span>
+                    <span>{ptLength.toFixed(2)} м</span>
+                    <span>·</span>
+                    <span style={{ color: 'var(--gold)' }}>{(ptWeight / 1000).toFixed(3)} т</span>
+                  </div>
+                )
+              }
+              return null
+            })()}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span className="form-label" style={{ marginBottom: 0 }}>Длины труб</span>
               <span className="form-label" style={{ marginBottom: 0, color: 'var(--gold)' }}>
@@ -298,65 +496,119 @@ export default function AccountingPage() {
                 </div>
               ))}
             </div>
-
-            {totals.totalPipes < MAX_PIPE_ROWS && (
-              <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 6 }} onClick={() => addLengthRow(pi)}>
-                + Добавить строку
-              </button>
-            )}
           </div>
         )
       })}
+
+      {errors.pipes && <span className="field-error" style={{ display: 'block', marginBottom: 8 }}>{errors.pipes}</span>}
 
       <button className="btn btn-secondary" style={{ width: '100%', marginBottom: 12 }} onClick={addPipeType}>
         + Добавить вид трубы
       </button>
 
+      {/* Фото погрузки */}
+      <div className="card">
+        <div className="card-header">
+          <div className="card-num">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </div>
+          <div className="card-title">Фото погрузки</div>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)' }}>{photos.length}/3</span>
+        </div>
+
+        <div className="photo-grid">
+          {['Перед', 'Зад', 'Доп.'].map(label => {
+            const photo = photos.find(p => p.label === label)
+            return (
+              <div key={label} className="photo-slot" onClick={() => handlePhotoAdd(label)}>
+                {photo ? (
+                  <>
+                    <img src={photo.dataUrl} alt={label} />
+                    <div className="photo-slot-label">{label}</div>
+                    <button className="photo-slot-remove" onClick={e => { e.stopPropagation(); handlePhotoRemove(photo.id) }}>×</button>
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="24" height="24" style={{ opacity: 0.35 }}>
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    <span style={{ fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{label}</span>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {photos.length === 0 && (
+          <p style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', marginTop: 6 }}>
+            Нажмите на слот — откроется камера или галерея
+          </p>
+        )}
+      </div>
+
       {/* Итоги */}
-      {totals.totalPipes > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-num" style={{ background: 'linear-gradient(135deg, #a07845, var(--gold))' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </div>
-            <div className="card-title">Итого</div>
+      <div className="card">
+        <div className="card-header">
+          <div className="card-num" style={{ background: 'linear-gradient(135deg, #a07845, var(--gold))' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
           </div>
+          <div className="card-title">Итого</div>
+        </div>
 
-          <div className="result-row">
-            <span className="result-label">Количество труб</span>
-            <span className="result-value">{totals.totalPipes} шт</span>
-          </div>
-          <div className="result-row">
-            <span className="result-label">Общая длина</span>
-            <span className="result-value">{totals.totalLength.toFixed(1)} м</span>
-          </div>
-          <div className="result-row">
-            <span className="result-label">Общий тоннаж</span>
-            <span className="result-value">{(totals.totalWeight / 1000).toFixed(3)} т</span>
-          </div>
+        <div className="result-row">
+          <span className="result-label">Количество труб</span>
+          <span className="result-value">{totals.totalPipes} шт</span>
+        </div>
+        <div className="result-row">
+          <span className="result-label">Общая длина</span>
+          <span className="result-value">{totals.totalLength.toFixed(2)} м</span>
+        </div>
+        <div className="result-row">
+          <span className="result-label">Общий тоннаж</span>
+          <span className="result-value">{(totals.totalWeight / 1000).toFixed(3)} т</span>
+        </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleSave}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleSave}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            {isEditMode ? 'Обновить' : 'Сохранить'}
+          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} title="Предпросмотр" onClick={handlePreview} disabled={isPreviewing}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
               </svg>
-              Сохранить
             </button>
-            <button className="btn btn-gold" onClick={handlePrint}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+            <button className="btn btn-gold" style={{ flex: 1 }} title="Скачать PDF" onClick={handlePrint} disabled={isExporting}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                 <polyline points="6 9 6 2 18 2 18 9" />
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
                 <rect x="6" y="14" width="12" height="8" />
               </svg>
             </button>
+            <button className="btn btn-secondary" style={{ flex: 1 }} title="Поделиться" onClick={handleShare} disabled={isExporting}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -12,8 +12,8 @@ export default defineConfig({
         name: 'Pipe Tracker Pro',
         short_name: 'PipeTracker',
         description: 'Учёт отгрузки и приёма стальных труб',
-        theme_color: '#2C3531',
-        background_color: '#2C3531',
+        theme_color: '#09141A',
+        background_color: '#09141A',
         display: 'standalone',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },

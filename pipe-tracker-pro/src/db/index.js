@@ -1,4 +1,5 @@
 import { openDB } from 'idb'
+import { randomUUID } from '../utils/uuid'
 
 const DB_NAME = 'pipe-tracker-db'
 const DB_VERSION = 1
@@ -27,54 +28,101 @@ function getDB() {
 // === Documents ===
 
 export async function getAllDocuments() {
-  const db = await getDB()
-  const docs = await db.getAllFromIndex('documents', 'date')
-  return docs.reverse() // newest first
+  try {
+    const db = await getDB()
+    const docs = await db.getAllFromIndex('documents', 'date')
+    return docs.reverse()
+  } catch (err) {
+    console.error('getAllDocuments error:', err)
+    throw err
+  }
 }
 
 export async function getDocument(id) {
-  const db = await getDB()
-  return db.get('documents', id)
+  try {
+    const db = await getDB()
+    return db.get('documents', id)
+  } catch (err) {
+    console.error('getDocument error:', err)
+    throw err
+  }
 }
 
 export async function saveDocument(doc) {
-  const db = await getDB()
-  if (!doc.id) {
-    doc.id = crypto.randomUUID()
-    doc.createdAt = new Date().toISOString()
+  try {
+    const db = await getDB()
+    if (!doc.id) {
+      doc.id = randomUUID()
+      doc.createdAt = new Date().toISOString()
+    }
+    doc.updatedAt = new Date().toISOString()
+    await db.put('documents', doc)
+    if (doc.counterparty) {
+      await saveCounterparty(doc.counterparty)
+    }
+    return doc
+  } catch (err) {
+    console.error('saveDocument error:', err)
+    throw err
   }
-  doc.updatedAt = new Date().toISOString()
-  await db.put('documents', doc)
-  
-  // Save counterparty if exists
-  if (doc.counterparty) {
-    await saveCounterparty(doc.counterparty)
+}
+
+export async function updateDocument(doc) {
+  try {
+    const db = await getDB()
+    doc.updatedAt = new Date().toISOString()
+    await db.put('documents', doc)
+    if (doc.counterparty) {
+      await saveCounterparty(doc.counterparty)
+    }
+    return doc
+  } catch (err) {
+    console.error('updateDocument error:', err)
+    throw err
   }
-  
-  return doc
 }
 
 export async function deleteDocument(id) {
-  const db = await getDB()
-  await db.delete('documents', id)
+  try {
+    const db = await getDB()
+    await db.delete('documents', id)
+  } catch (err) {
+    console.error('deleteDocument error:', err)
+    throw err
+  }
 }
 
 // === Counterparties ===
 
 export async function getAllCounterparties() {
-  const db = await getDB()
-  return db.getAll('counterparties')
+  try {
+    const db = await getDB()
+    return db.getAll('counterparties')
+  } catch (err) {
+    console.error('getAllCounterparties error:', err)
+    throw err
+  }
 }
 
 export async function saveCounterparty(name) {
-  const db = await getDB()
-  const existing = await db.get('counterparties', name)
-  if (!existing) {
-    await db.put('counterparties', { name, createdAt: new Date().toISOString() })
+  try {
+    const db = await getDB()
+    const existing = await db.get('counterparties', name)
+    if (!existing) {
+      await db.put('counterparties', { name, createdAt: new Date().toISOString() })
+    }
+  } catch (err) {
+    console.error('saveCounterparty error:', err)
+    throw err
   }
 }
 
 export async function deleteCounterparty(name) {
-  const db = await getDB()
-  await db.delete('counterparties', name)
+  try {
+    const db = await getDB()
+    await db.delete('counterparties', name)
+  } catch (err) {
+    console.error('deleteCounterparty error:', err)
+    throw err
+  }
 }

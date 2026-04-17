@@ -1,10 +1,14 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import './App.css'
+import logoImage from './assets/newlogo-dark-transparent.png'
+import OfflineIndicator from './components/OfflineIndicator'
 
 export default function App() {
   return (
     <div className="app-layout">
       <header className="app-header">
+        <img src={logoImage} alt="Трубаметалл" className="app-logo" />
+        <OfflineIndicator />
       </header>
 
       <main className="app-content">
