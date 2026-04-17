@@ -234,36 +234,69 @@ export default function AccountingPage() {
     }
   }
 
-  const handlePrint = async () => {
+  const handleOpenPdf = async () => {
     setIsExporting(true)
     setError(null)
+    const win = window.open('', '_blank')
     try {
-      const { printDocument } = await import('../utils/print')
-      await printDocument(buildDocData())
+      const { getDocumentBlob } = await import('../utils/print')
+      const blob = await getDocumentBlob(buildDocData(), 'pdf')
+      const url = URL.createObjectURL(blob)
+      win.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch (err) {
+      win?.close()
       setError('Ошибка при генерации PDF: ' + err.message)
     } finally {
       setIsExporting(false)
     }
   }
 
-  const handleShare = async () => {
-    setIsExporting(true)
+  const handleShare = () => {
     setError(null)
     setInfo(null)
-    try {
-      const { shareDocument } = await import('../utils/print')
-      const shared = await shareDocument(buildDocData(), photos)
-      if (!shared) {
-        setInfo('PDF открыт в браузере. Нажмите ⋮ → «Поделиться» чтобы отправить файл.')
-      }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        setError('Ошибка при отправке: ' + err.message)
-      }
-    } finally {
-      setIsExporting(false)
+    const docData = buildDocData()
+    const typeLabel = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
+
+    const lines = [
+      `📋 ${typeLabel}`,
+      docData.date ? `📅 ${new Date(docData.date).toLocaleDateString('ru-RU')}` : '',
+      docData.counterparty ? `🏢 ${docData.counterparty}` : '',
+      docData.location ? `📍 ${docData.location}` : '',
+      docData.vehicle ? `🚛 ${docData.vehicle}` : '',
+      '',
+      ...docData.pipeTypes.flatMap(pt => {
+        const filled = (pt.lengths || []).filter(r => Number(r.length) > 0)
+        if (!filled.length || !pt.diameter) return []
+        return [`• ${pt.gost || 'б/ГОСТа'} Ø${pt.diameter}×${pt.thickness} мм — ${filled.length} шт`]
+      }),
+      '',
+      `Труб: ${docData.totalPipes} шт`,
+      `Длина: ${docData.totalLength.toFixed(2)} м`,
+      `Тоннаж: ${(docData.totalWeight / 1000).toFixed(3)} т`,
+      docData.note ? `\n📝 ${docData.note}` : '',
+    ].filter(Boolean)
+    const text = lines.join('\n')
+
+    const labelMap = { 'Перед': 'front', 'Зад': 'back', 'Доп.': 'extra' }
+    const photoFiles = photos.map((p, i) => {
+      const base64 = p.dataUrl.split(',')[1]
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+      return new File([bytes], `${labelMap[p.label] || `photo-${i + 1}`}.jpg`, { type: 'image/jpeg' })
+    })
+
+    if (!navigator.share) {
+      setInfo('Функция «Поделиться» не поддерживается в вашем браузере.')
+      return
     }
+
+    const doShare = photoFiles.length > 0 && navigator.canShare?.({ files: photoFiles })
+      ? navigator.share({ title: typeLabel, text, files: photoFiles })
+      : navigator.share({ title: typeLabel, text })
+
+    doShare.catch(err => {
+      if (err.name !== 'AbortError') setError('Ошибка при отправке: ' + err.message)
+    })
   }
 
   const handlePreview = async () => {
@@ -599,14 +632,14 @@ export default function AccountingPage() {
                 <circle cx="12" cy="12" r="3" />
               </svg>
             </button>
-            <button className="btn btn-gold" style={{ flex: 1 }} title="Скачать PDF" onClick={handlePrint} disabled={isExporting}>
+            <button className="btn btn-gold" style={{ flex: 1 }} title="Открыть PDF" onClick={handleOpenPdf} disabled={isExporting}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                <polyline points="6 9 6 2 18 2 18 9" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                <rect x="6" y="14" width="12" height="8" />
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </button>
-            <button className="btn btn-secondary" style={{ flex: 1 }} title="Поделиться" onClick={handleShare} disabled={isExporting}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} title="Поделиться" onClick={handleShare}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
                 <polyline points="16 6 12 2 8 6" />

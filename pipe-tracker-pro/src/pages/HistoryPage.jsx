@@ -73,10 +73,15 @@ export default function HistoryPage() {
     if (!selectedDoc) return
     setIsExporting(true)
     setError(null)
+    const win = window.open('', '_blank')
     try {
-      const { printDocument } = await import('../utils/print')
-      await printDocument(selectedDoc)
+      const { getDocumentBlob } = await import('../utils/print')
+      const blob = await getDocumentBlob(selectedDoc, 'pdf')
+      const url = URL.createObjectURL(blob)
+      win.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch (err) {
+      win?.close()
       setError('Ошибка при генерации PDF: ' + err.message)
     } finally {
       setIsExporting(false)
@@ -318,11 +323,11 @@ function DocumentDetail({ doc, onBack, onPrint, onEdit, onDelete, isExporting })
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-primary" style={{ flex: 1 }} onClick={onPrint} disabled={isExporting}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-            <polyline points="6 9 6 2 18 2 18 9" />
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-            <rect x="6" y="14" width="12" height="8" />
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          {isExporting ? 'Генерация...' : 'Печать / PDF'}
+          {isExporting ? 'Генерация...' : 'Открыть PDF'}
         </button>
         <button className="btn btn-secondary" onClick={onEdit}>
           Изменить
