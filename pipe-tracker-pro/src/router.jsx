@@ -5,6 +5,7 @@ import App from './App'
 const CalculatorPage = lazy(() => import('./pages/CalculatorPage'))
 const AccountingPage = lazy(() => import('./pages/AccountingPage'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage'))
+const TemplatesPage = lazy(() => import('./pages/TemplatesPage'))
 
 function LoadingFallback() {
   return <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>Загрузка...</div>
@@ -19,6 +20,7 @@ const router = createBrowserRouter([
       { path: 'accounting', element: <Suspense fallback={<LoadingFallback />}><AccountingPage /></Suspense> },
       { path: 'accounting/edit/:id', element: <Suspense fallback={<LoadingFallback />}><AccountingPage /></Suspense> },
       { path: 'history', element: <Suspense fallback={<LoadingFallback />}><HistoryPage /></Suspense> },
+      { path: 'templates', element: <Suspense fallback={<LoadingFallback />}><TemplatesPage /></Suspense> },
     ],
   },
 ])
