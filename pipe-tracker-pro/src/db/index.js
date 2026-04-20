@@ -2,22 +2,29 @@ import { openDB } from 'idb'
 import { randomUUID } from '../utils/uuid'
 
 const DB_NAME = 'pipe-tracker-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise
 
 function getDB() {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains('documents')) {
-          const store = db.createObjectStore('documents', { keyPath: 'id' })
-          store.createIndex('date', 'date')
-          store.createIndex('type', 'type')
-          store.createIndex('counterparty', 'counterparty')
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          if (!db.objectStoreNames.contains('documents')) {
+            const store = db.createObjectStore('documents', { keyPath: 'id' })
+            store.createIndex('date', 'date')
+            store.createIndex('type', 'type')
+            store.createIndex('counterparty', 'counterparty')
+          }
+          if (!db.objectStoreNames.contains('counterparties')) {
+            db.createObjectStore('counterparties', { keyPath: 'name' })
+          }
         }
-        if (!db.objectStoreNames.contains('counterparties')) {
-          db.createObjectStore('counterparties', { keyPath: 'name' })
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains('templates')) {
+            db.createObjectStore('templates', { keyPath: 'id' })
+          }
         }
       },
     })
@@ -123,6 +130,43 @@ export async function deleteCounterparty(name) {
     await db.delete('counterparties', name)
   } catch (err) {
     console.error('deleteCounterparty error:', err)
+    throw err
+  }
+}
+
+// === Templates ===
+
+export async function getAllTemplates() {
+  try {
+    const db = await getDB()
+    return db.getAll('templates')
+  } catch (err) {
+    console.error('getAllTemplates error:', err)
+    throw err
+  }
+}
+
+export async function saveTemplate(tpl) {
+  try {
+    const db = await getDB()
+    if (!tpl.id) {
+      tpl.id = randomUUID()
+      tpl.createdAt = new Date().toISOString()
+    }
+    await db.put('templates', tpl)
+    return tpl
+  } catch (err) {
+    console.error('saveTemplate error:', err)
+    throw err
+  }
+}
+
+export async function deleteTemplate(id) {
+  try {
+    const db = await getDB()
+    await db.delete('templates', id)
+  } catch (err) {
+    console.error('deleteTemplate error:', err)
     throw err
   }
 }
