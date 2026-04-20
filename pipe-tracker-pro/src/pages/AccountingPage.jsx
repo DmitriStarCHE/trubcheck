@@ -315,11 +315,10 @@ export default function AccountingPage() {
     const docData = buildDocData()
     const typeLabel = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
 
-    const labelMap = { 'Перед': 'front', 'Зад': 'back', 'Доп.': 'extra' }
     const photoFiles = photos.map((p, i) => {
       const base64 = p.dataUrl.split(',')[1]
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-      return new File([bytes], `${labelMap[p.label] || `photo-${i + 1}`}.jpg`, { type: 'image/jpeg' })
+      return new File([bytes], `photo-${p.label || i + 1}.jpg`, { type: 'image/jpeg' })
     })
 
     try {
@@ -687,28 +686,21 @@ export default function AccountingPage() {
             </svg>
           </div>
           <div className="card-title">Фото погрузки</div>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)' }}>{photos.length}/3</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)' }}>{photos.length}/4</span>
         </div>
 
         <div className="photo-grid">
-          {['Перед', 'Зад', 'Доп.'].map(label => {
+          {['1','2','3','4'].map(label => {
             const photo = photos.find(p => p.label === label)
             return (
               <div key={label} className="photo-slot" onClick={() => handlePhotoAdd(label)}>
                 {photo ? (
                   <>
-                    <img src={photo.dataUrl} alt={label} />
-                    <div className="photo-slot-label">{label}</div>
+                    <img src={photo.dataUrl} alt={`Фото ${label}`} />
                     <button className="photo-slot-remove" onClick={e => { e.stopPropagation(); handlePhotoRemove(photo.id) }}>×</button>
                   </>
                 ) : (
-                  <>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="24" height="24" style={{ opacity: 0.35 }}>
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                      <circle cx="12" cy="13" r="4"/>
-                    </svg>
-                    <span style={{ fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{label}</span>
-                  </>
+                  <span style={{ fontSize: 28, fontWeight: 300, opacity: 0.35, lineHeight: 1 }}>+</span>
                 )}
               </div>
             )

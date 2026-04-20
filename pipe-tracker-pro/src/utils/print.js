@@ -252,12 +252,10 @@ export async function shareDocument(docData, photos = []) {
   const blob = await getDocumentBlob(docData, 'pdf')
   const pdfFile = new File([blob], `document-${docData.id || Date.now()}.pdf`, { type: 'application/pdf' })
 
-  const labelMap = { 'Перед': 'front', 'Зад': 'back', 'Доп.': 'extra' }
   const photoFiles = photos.map((p, i) => {
     const base64 = p.dataUrl.split(',')[1]
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
-    const slug = labelMap[p.label] || `photo-${i + 1}`
-    return new File([bytes], `${slug}.jpg`, { type: 'image/jpeg' })
+    return new File([bytes], `photo-${p.label || i + 1}.jpg`, { type: 'image/jpeg' })
   })
 
   const title = docData.type === 'shipment' ? 'Накладная на отгрузку' : 'Приёмный акт'
