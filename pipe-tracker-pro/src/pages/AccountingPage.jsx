@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { GOST_DATA, calculateWeight } from '../data/gost'
 import { saveDocument, updateDocument, getDocument, getAllCounterparties, getAllTemplates, saveTemplate } from '../db'
@@ -43,6 +43,8 @@ export default function AccountingPage() {
   const [showSaveTpl, setShowSaveTpl] = useState(false)
   const [tplName, setTplName] = useState('')
   const [toast, setToast] = useState(null)
+
+  const toastTimerRef = useRef(null)
 
   useEffect(() => {
     getAllCounterparties()
@@ -133,9 +135,12 @@ export default function AccountingPage() {
   const handlePhotoRemove = (id) => setPhotos(prev => prev.filter(p => p.id !== id))
 
   const showToastMsg = (msg) => {
+    clearTimeout(toastTimerRef.current)
     setToast(msg)
-    setTimeout(() => setToast(null), 2500)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
   }
+
+  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
   const handleApplyTemplate = (tpl) => {
     setShowTemplateSheet(false)
