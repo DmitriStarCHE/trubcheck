@@ -10,7 +10,6 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState([])
   const [error, setError] = useState(null)
   const [form, setForm] = useState(null) // null = скрыта, object = открыта
-  const [editingId, setEditingId] = useState(null)
 
   const gostKeys = Object.keys(GOST_DATA)
 
@@ -27,7 +26,6 @@ export default function TemplatesPage() {
 
   const openNew = () => {
     setForm(emptyForm())
-    setEditingId(null)
   }
 
   const openEdit = (tpl) => {
@@ -36,10 +34,9 @@ export default function TemplatesPage() {
       name: tpl.name,
       pipeSpecs: tpl.pipeTypes.map(pt => ({ ...pt, id: pt.id || randomUUID() })),
     })
-    setEditingId(tpl.id)
   }
 
-  const closeForm = () => { setForm(null); setEditingId(null) }
+  const closeForm = () => { setForm(null) }
 
   const updateSpec = (specId, field, value) => {
     setForm(f => ({
@@ -108,7 +105,7 @@ export default function TemplatesPage() {
       {form && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header">
-            <div className="card-title">{editingId ? 'Изменить шаблон' : 'Новый шаблон'}</div>
+            <div className="card-title">{form?.id ? 'Изменить шаблон' : 'Новый шаблон'}</div>
           </div>
 
           <div className="form-group">
@@ -198,7 +195,7 @@ export default function TemplatesPage() {
         </div>
       ) : (
         templates.map(tpl => (
-          <div key={tpl.id} className="card" style={{ borderLeft: editingId === tpl.id ? '3px solid var(--pink)' : undefined }}>
+          <div key={tpl.id} className="card" style={{ borderLeft: form?.id === tpl.id ? '3px solid var(--pink)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{tpl.name}</div>
