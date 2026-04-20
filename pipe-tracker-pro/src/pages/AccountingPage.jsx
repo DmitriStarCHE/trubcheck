@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { GOST_DATA, calculateWeight } from '../data/gost'
-import { saveDocument, updateDocument, getDocument, getAllCounterparties } from '../db'
+import { saveDocument, updateDocument, getDocument, getAllCounterparties, getAllTemplates, saveTemplate } from '../db'
 import { randomUUID } from '../utils/uuid'
 
 const MAX_PIPE_ROWS = 60
@@ -38,11 +38,19 @@ export default function AccountingPage() {
   const [errors, setErrors] = useState({})
   const [isExporting, setIsExporting] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [templates, setTemplates] = useState([])
+  const [showTemplateSheet, setShowTemplateSheet] = useState(false)
+  const [showSaveTpl, setShowSaveTpl] = useState(false)
+  const [tplName, setTplName] = useState('')
+  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     getAllCounterparties()
       .then(list => setCounterparties(list.map(c => c.name)))
       .catch(err => setError('Не удалось загрузить контрагентов: ' + err.message))
+    getAllTemplates()
+      .then(setTemplates)
+      .catch(() => {})
     import('../utils/print').catch(() => {})
   }, [])
 
@@ -123,6 +131,39 @@ export default function AccountingPage() {
   }
 
   const handlePhotoRemove = (id) => setPhotos(prev => prev.filter(p => p.id !== id))
+
+  const showToastMsg = (msg) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  const handleApplyTemplate = (tpl) => {
+    setShowTemplateSheet(false)
+    setPipeTypes(tpl.pipeTypes.map(pt => ({
+      ...pt,
+      id: randomUUID(),
+      lengths: [{ id: randomUUID(), length: '' }],
+      batches: [emptyBatch()],
+    })))
+  }
+
+  const handleSaveAsTemplate = async () => {
+    if (!tplName.trim()) return
+    const validSpecs = pipeTypes
+      .filter(pt => pt.diameter && pt.thickness)
+      .map(({ lengths: _l, batches: _b, id: _id, ...rest }) => rest)
+    if (!validSpecs.length) return
+    try {
+      await saveTemplate({ name: tplName.trim(), pipeTypes: validSpecs })
+      const updated = await getAllTemplates()
+      setTemplates(updated)
+      setTplName('')
+      setShowSaveTpl(false)
+      showToastMsg('✓ Шаблон сохранён')
+    } catch (err) {
+      setError('Не удалось сохранить шаблон: ' + err.message)
+    }
+  }
 
   const totals = useMemo(() => {
     let totalPipes = 0
@@ -447,6 +488,19 @@ export default function AccountingPage() {
       </div>
 
       {/* Параметры трубы */}
+      {templates.length > 0 && (
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ width: '100%', marginBottom: 10, borderColor: 'var(--cyan)', color: 'var(--cyan-light)' }}
+          onClick={() => setShowTemplateSheet(true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          Применить шаблон
+        </button>
+      )}
       {pipeTypes.map((pt, pi) => {
         const diameters = pt.gost ? Object.keys(GOST_DATA[pt.gost]).map(Number).sort((a, b) => a - b) : []
         const thicknesses = (pt.gost && pt.diameter) ? GOST_DATA[pt.gost][Number(pt.diameter)] || [] : []
@@ -676,6 +730,38 @@ export default function AccountingPage() {
         + Добавить вид трубы
       </button>
 
+      {pipeTypes.some(pt => pt.diameter && pt.thickness) && (
+        <div style={{ marginTop: 8 }}>
+          {!showSaveTpl ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ width: '100%', color: 'var(--gold)', borderColor: 'var(--border-gold)' }}
+              onClick={() => setShowSaveTpl(true)}
+            >
+              ⭐ Сохранить как шаблон
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="text"
+                placeholder='Название шаблона'
+                value={tplName}
+                onChange={e => setTplName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSaveAsTemplate()}
+                style={{ flex: 1 }}
+              />
+              <button className="btn btn-primary btn-sm" onClick={handleSaveAsTemplate} disabled={!tplName.trim()}>
+                Сохранить
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => { setShowSaveTpl(false); setTplName('') }}>
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Фото погрузки */}
       <div className="card">
         <div className="card-header">
@@ -772,6 +858,27 @@ export default function AccountingPage() {
           </div>
         </div>
       </div>
+      {/* Bottom sheet — выбор шаблона */}
+      {showTemplateSheet && (
+        <div className="bottom-sheet-overlay" onClick={() => setShowTemplateSheet(false)}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <div className="bottom-sheet-title">Выбрать шаблон</div>
+            {templates.map(tpl => (
+              <div key={tpl.id} className="bottom-sheet-item" onClick={() => handleApplyTemplate(tpl)}>
+                <div className="bottom-sheet-item-name">{tpl.name}</div>
+                <div className="bottom-sheet-item-desc">
+                  {(tpl.pipeTypes || []).map((pt) =>
+                    `Ø${pt.diameter}×${pt.thickness}${pt.steelGrade ? ' ' + pt.steelGrade : ''}`
+                  ).join(' · ')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && <div className="toast">{toast}</div>}
     </div>
   )
 }
