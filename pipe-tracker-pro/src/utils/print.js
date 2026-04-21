@@ -63,7 +63,15 @@ function escapeHtml(str) {
 
 function generateDocumentHtml(doc) {
   const title = doc.type === 'shipment' ? 'НАКЛАДНАЯ НА ОТГРУЗКУ' : 'ПРИЁМНЫЙ АКТ'
-  const docNum = doc.id ? escapeHtml(doc.id.slice(-8).toUpperCase()) : '—'
+  let docNum = '—'
+  if (doc.docNumber && doc.date) {
+    const d = new Date(doc.date)
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    docNum = `${day}/${month}/${doc.docNumber}`
+  } else if (doc.id) {
+    docNum = escapeHtml(doc.id.slice(-8).toUpperCase())
+  }
 
   const pipeTablesHtml = (doc.pipeTypes || []).map(pt => {
     const D = Number(pt.diameter)

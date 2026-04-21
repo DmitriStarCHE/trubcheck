@@ -55,12 +55,21 @@ export async function getDocument(id) {
   }
 }
 
+function dayKey(dateVal) {
+  const d = dateVal ? new Date(dateVal) : new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export async function saveDocument(doc) {
   try {
     const db = await getDB()
     if (!doc.id) {
       doc.id = randomUUID()
       doc.createdAt = new Date().toISOString()
+      const key = dayKey(doc.date)
+      const allDocs = await db.getAll('documents')
+      const sameDay = allDocs.filter(d => d.date && dayKey(d.date) === key)
+      doc.docNumber = sameDay.length + 1
     }
     doc.updatedAt = new Date().toISOString()
     await db.put('documents', doc)

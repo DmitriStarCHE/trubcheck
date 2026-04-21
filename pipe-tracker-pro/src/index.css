@@ -134,7 +134,7 @@ body {
   background-size: auto, auto, 22px 22px;
   color: var(--text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
   min-height: 100vh;
   min-height: 100dvh;
@@ -149,9 +149,9 @@ h1, h2, h3 {
   font-weight: 700;
 }
 
-h1 { font-size: 26px; }
-h2 { font-size: 20px; }
-h3 { font-size: 16px; letter-spacing: 1.5px; }
+h1 { font-size: 28px; }
+h2 { font-size: 22px; }
+h3 { font-size: 17px; letter-spacing: 1.5px; }
 
 a {
   color: inherit;
@@ -172,7 +172,7 @@ input, select, textarea {
   background: rgba(9, 20, 26, 0.8);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 12px 14px;
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
   box-shadow: var(--shadow-inner);

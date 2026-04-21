@@ -205,7 +205,7 @@
   padding: 11px 20px;
   border-radius: var(--radius);
   font-family: 'Inter', sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.4px;
   transition: all var(--transition);
@@ -269,7 +269,7 @@
 
 .btn-sm {
   padding: 7px 12px;
-  font-size: 12px;
+  font-size: 13px;
   border-radius: 8px;
 }
 
@@ -306,7 +306,7 @@
 .form-label {
   display: block;
   font-family: 'Inter', sans-serif;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 5px;
   font-weight: 600;
@@ -334,14 +334,14 @@
 }
 
 .result-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   font-weight: 500;
 }
 
 .result-value {
   font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--gold-light);
   letter-spacing: 0.5px;
@@ -436,7 +436,7 @@
 /* ===== VALIDATION ===== */
 .field-error {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--danger-light);
   margin-top: 4px;
   letter-spacing: 0.2px;
@@ -632,7 +632,7 @@ select.input-error {
 }
 
 .empty-state p {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
 }
 
@@ -699,13 +699,13 @@ select.input-error {
 
 .bottom-sheet-item-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   margin-bottom: 2px;
 }
 
 .bottom-sheet-item-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -720,7 +720,7 @@ select.input-error {
   color: var(--text);
   padding: 10px 20px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   z-index: 300;
   white-space: nowrap;
