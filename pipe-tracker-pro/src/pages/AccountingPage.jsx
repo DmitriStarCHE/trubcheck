@@ -28,6 +28,7 @@ export default function AccountingPage() {
   const [vehicle, setVehicle] = useState('')
   const [note, setNote] = useState('')
   const [docId, setDocId] = useState(null)
+  const [docNumber, setDocNumber] = useState(null)
 
   const [pipeTypes, setPipeTypes] = useState([emptyPipeType()])
 
@@ -62,6 +63,7 @@ export default function AccountingPage() {
       .then(doc => {
         if (!doc) return
         setDocId(doc.id)
+        setDocNumber(doc.docNumber || null)
         setType(doc.type || 'shipment')
         setDate(doc.date || today)
         setLocation(doc.location || '')
@@ -301,6 +303,7 @@ export default function AccountingPage() {
 
   const buildDocData = () => ({
     id: docId || 'preview',
+    docNumber,
     type,
     date,
     counterparty,
