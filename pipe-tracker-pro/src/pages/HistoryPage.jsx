@@ -358,12 +358,12 @@ function DocumentDetail({ doc, onBack, onPrint, onEdit, onDelete, isExporting })
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          {isExporting ? 'Генерация...' : 'Открыть PDF'}
+          {isExporting ? 'Генерация...' : 'PDF'}
         </button>
-        <button className="btn btn-secondary" onClick={onEdit}>
+        <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onEdit}>
           Изменить
         </button>
-        <button className="btn btn-danger" onClick={onDelete}>
+        <button className="btn btn-danger" style={{ flex: 1 }} onClick={onDelete}>
           Удалить
         </button>
       </div>
