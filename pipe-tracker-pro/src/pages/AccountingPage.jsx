@@ -10,7 +10,7 @@ const emptyBatch = () => ({ id: randomUUID(), count: '', totalLength: '', totalW
 const emptyPipeType = () => ({
   gost: '', diameter: '', thickness: '', steelGrade: '',
   mode: 'individual',
-  lengths: [{ id: randomUUID(), length: '' }],
+  lengths: [{ id: randomUUID(), length: '', note: '' }],
   batches: [emptyBatch()],
 })
 
@@ -256,9 +256,21 @@ export default function AccountingPage() {
         ri === rowIndex ? { ...r, length: value } : r
       )
       if (rowIndex === newLengths.length - 1 && value !== '') {
-        newLengths.push({ id: randomUUID(), length: '' })
+        newLengths.push({ id: randomUUID(), length: '', note: '' })
       }
       return { ...p, lengths: newLengths }
+    }))
+  }
+
+  const updateLengthNote = (pipeIndex, rowIndex, value) => {
+    setPipeTypes(pipeTypes.map((p, i) => {
+      if (i !== pipeIndex) return p
+      return {
+        ...p,
+        lengths: p.lengths.map((r, ri) =>
+          ri === rowIndex ? { ...r, note: value } : r
+        ),
+      }
     }))
   }
 
@@ -691,11 +703,16 @@ export default function AccountingPage() {
             ) : (
               /* Таблица индивидуальных длин */
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <span className="form-label" style={{ marginBottom: 0 }}>Длины труб</span>
                   <span className="form-label" style={{ marginBottom: 0, color: 'var(--gold)' }}>
                     {pt.lengths.filter(r => Number(r.length) > 0).length} / {MAX_PIPE_ROWS}
                   </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 4, paddingLeft: 30 }}>
+                  <span style={{ flex: 1, fontSize: 10, color: 'var(--text-dim)' }}>Длина, м</span>
+                  <span style={{ flex: 1.5, fontSize: 10, color: 'var(--text-dim)' }}>Примечание</span>
+                  <span style={{ width: 28, flexShrink: 0 }} />
                 </div>
                 <div className="length-table" style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
                   {pt.lengths.map((row, ri) => (
@@ -707,10 +724,17 @@ export default function AccountingPage() {
                         type="number"
                         step="0.1"
                         min="0"
-                        placeholder="Длина, м"
+                        placeholder="м"
                         value={row.length}
                         onChange={(e) => updateLength(pi, ri, e.target.value)}
                         style={{ flex: 1 }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Примечание"
+                        value={row.note || ''}
+                        onChange={(e) => updateLengthNote(pi, ri, e.target.value)}
+                        style={{ flex: 1.5 }}
                       />
                       {pt.lengths.length > 1 && (
                         <button className="btn-icon btn-sm" onClick={() => removeLengthRow(pi, ri)} style={{ flexShrink: 0 }}>

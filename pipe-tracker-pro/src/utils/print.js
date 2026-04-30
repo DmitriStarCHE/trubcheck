@@ -117,6 +117,7 @@ function generateDocumentHtml(doc) {
     const lengths = (pt.lengths || []).filter(r => Number(r.length) > 0)
     if (lengths.length === 0) return ''
 
+    const hasNotes = lengths.some(r => r.note && r.note.trim())
     let subtotalLen = 0
     let subtotalWeight = 0
     const rows = lengths.map((r, i) => {
@@ -126,6 +127,7 @@ function generateDocumentHtml(doc) {
       return `<tr>
         <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
         <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${l.toFixed(2)}</td>
+        ${hasNotes ? `<td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${escapeHtml(r.note || '')}</td>` : ''}
       </tr>`
     }).join('')
 
@@ -139,6 +141,7 @@ function generateDocumentHtml(doc) {
             <tr style="background:#f0f0f0;">
               <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">№</th>
               <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">Длина, м</th>
+              ${hasNotes ? '<th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">Примечание</th>' : ''}
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -146,6 +149,7 @@ function generateDocumentHtml(doc) {
             <tr style="font-weight:600;background:#f9f9f9;">
               <td style="padding:2px 6px;border:1px solid #ccc;">Итого: ${lengths.length} шт</td>
               <td style="padding:2px 6px;border:1px solid #ccc;">${subtotalLen.toFixed(2)} м / ${subtotalWeight.toFixed(3)} кг</td>
+              ${hasNotes ? '<td style="padding:2px 6px;border:1px solid #ccc;"></td>' : ''}
             </tr>
           </tfoot>
         </table>
