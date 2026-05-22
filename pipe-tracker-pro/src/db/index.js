@@ -86,6 +86,12 @@ export async function saveDocument(doc) {
 export async function updateDocument(doc) {
   try {
     const db = await getDB()
+    if (!doc.docNumber) {
+      const existing = await db.get('documents', doc.id)
+      if (existing && existing.docNumber) {
+        doc.docNumber = existing.docNumber
+      }
+    }
     doc.updatedAt = new Date().toISOString()
     await db.put('documents', doc)
     if (doc.counterparty) {

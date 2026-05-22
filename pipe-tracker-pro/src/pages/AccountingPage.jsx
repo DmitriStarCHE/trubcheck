@@ -324,6 +324,7 @@ export default function AccountingPage() {
     try {
       const doc = {
         type, date, location, counterparty, vehicle, note, pipeTypes,
+        docNumber,
         totalPipes: totals.totalPipes,
         totalLength: totals.totalLength,
         totalWeight: totals.totalWeight,
