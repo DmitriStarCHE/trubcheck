@@ -73,6 +73,8 @@ function generateDocumentHtml(doc) {
     docNum = escapeHtml(doc.id.slice(-8).toUpperCase())
   }
 
+  const SPLIT_THRESHOLD = 30
+
   const pipeTablesHtml = (doc.pipeTypes || []).map(pt => {
     const D = Number(pt.diameter)
     const S = Number(pt.thickness)
@@ -83,16 +85,57 @@ function generateDocumentHtml(doc) {
       const batches = (pt.batches || []).filter(b => Number(b.count) > 0 && Number(b.totalLength) > 0 && Number(b.totalWeight) > 0)
       if (batches.length === 0) return ''
       let totalCnt = 0, totalLen = 0, totalWt = 0
-      const rows = batches.map((b, i) => {
+      const rows = batches.map(b => {
         const cnt = Number(b.count); const len = Number(b.totalLength); const wt = Number(b.totalWeight)
         totalCnt += cnt; totalLen += len; totalWt += wt
-        return `<tr>
-          <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
-          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${cnt}</td>
-          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${len.toFixed(2)}</td>
-          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${wt.toFixed(3)}</td>
-        </tr>`
-      }).join('')
+        return { cnt, len, wt }
+      })
+
+      const batchTable = (slice, startIdx) => {
+        const bodyRows = slice.map((r, i) => `<tr>
+          <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${startIdx + i + 1}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.cnt}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.len.toFixed(2)}</td>
+          <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.wt.toFixed(3)}</td>
+        </tr>`).join('')
+        return `<table style="width:100%;border-collapse:collapse;font-size:10px;">
+          <thead><tr style="background:#f0f0f0;">
+            <th style="padding:2px 6px;border:1px solid #ccc;">№</th>
+            <th style="padding:2px 6px;border:1px solid #ccc;">Кол-во, шт</th>
+            <th style="padding:2px 6px;border:1px solid #ccc;">Длина, м</th>
+            <th style="padding:2px 6px;border:1px solid #ccc;">Тоннаж, тн</th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>`
+      }
+
+      if (rows.length > SPLIT_THRESHOLD) {
+        const leftRows = rows.slice(0, SPLIT_THRESHOLD)
+        const rightRows = rows.slice(SPLIT_THRESHOLD)
+        return `
+          <div style="margin-bottom:12px;">
+            <p style="font-weight:600;margin-bottom:4px;font-size:11px;">${header}</p>
+            <div style="display:flex;gap:12px;">
+              <div style="flex:1;">${batchTable(leftRows, 0)}</div>
+              <div style="flex:1;">${batchTable(rightRows, SPLIT_THRESHOLD)}</div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:4px;">
+              <tfoot><tr style="font-weight:600;background:#f9f9f9;">
+                <td style="padding:2px 6px;border:1px solid #ccc;">Итого:</td>
+                <td style="padding:2px 6px;border:1px solid #ccc;">${totalCnt} шт</td>
+                <td style="padding:2px 6px;border:1px solid #ccc;">${totalLen.toFixed(2)} м</td>
+                <td style="padding:2px 6px;border:1px solid #ccc;">${totalWt.toFixed(3)} тн</td>
+              </tr></tfoot>
+            </table>
+          </div>`
+      }
+
+      const batchRows = rows.map((r, i) => `<tr>
+        <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
+        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.cnt}</td>
+        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.len.toFixed(2)}</td>
+        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.wt.toFixed(3)}</td>
+      </tr>`).join('')
       return `
         <div style="margin-bottom:12px;">
           <p style="font-weight:600;margin-bottom:4px;font-size:11px;">${header}</p>
@@ -103,7 +146,7 @@ function generateDocumentHtml(doc) {
               <th style="padding:2px 6px;border:1px solid #ccc;">Длина, м</th>
               <th style="padding:2px 6px;border:1px solid #ccc;">Тоннаж, тн</th>
             </tr></thead>
-            <tbody>${rows}</tbody>
+            <tbody>${batchRows}</tbody>
             <tfoot><tr style="font-weight:600;background:#f9f9f9;">
               <td style="padding:2px 6px;border:1px solid #ccc;">Итого:</td>
               <td style="padding:2px 6px;border:1px solid #ccc;">${totalCnt} шт</td>
@@ -118,18 +161,57 @@ function generateDocumentHtml(doc) {
     if (lengths.length === 0) return ''
 
     const hasNotes = lengths.some(r => r.note && r.note.trim())
-    let subtotalLen = 0
-    let subtotalWeight = 0
-    const rows = lengths.map((r, i) => {
-      const l = Number(r.length)
-      subtotalLen += l
-      subtotalWeight += wpm * l
-      return `<tr>
-        <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
-        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${l.toFixed(2)}</td>
-        ${hasNotes ? `<td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${escapeHtml(r.note || '')}</td>` : ''}
-      </tr>`
-    }).join('')
+    const lengthRows = lengths.map(r => ({ len: Number(r.length), note: r.note || '' }))
+    const totalLen = lengthRows.reduce((s, r) => s + r.len, 0)
+    const totalWeight = lengthRows.reduce((s, r) => s + wpm * r.len, 0)
+
+    const indivTable = (slice, startIdx) => {
+      const bodyRows = slice.map((r, i) => `<tr>
+        <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${startIdx + i + 1}</td>
+        <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.len.toFixed(2)}</td>
+        ${hasNotes ? `<td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${escapeHtml(r.note)}</td>` : ''}
+      </tr>`).join('')
+      return `<table style="width:100%;border-collapse:collapse;font-size:10px;">
+        <thead>
+          <tr style="background:#f0f0f0;">
+            <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">№</th>
+            <th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">Длина, м</th>
+            ${hasNotes ? '<th style="padding:2px 6px;border:1px solid #ccc;text-align:left;">Примечание</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>`
+    }
+
+    if (lengths.length > SPLIT_THRESHOLD) {
+      const leftRows = lengthRows.slice(0, SPLIT_THRESHOLD)
+      const rightRows = lengthRows.slice(SPLIT_THRESHOLD)
+      return `
+        <div style="margin-bottom:12px;">
+          <p style="font-weight:600;margin-bottom:4px;font-size:11px;">
+            ${header} &nbsp;&nbsp; Вес п/м: ${wpm.toFixed(3)} кг/м
+          </p>
+          <div style="display:flex;gap:12px;">
+            <div style="flex:1;">${indivTable(leftRows, 0)}</div>
+            <div style="flex:1;">${indivTable(rightRows, SPLIT_THRESHOLD)}</div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:4px;">
+            <tfoot>
+              <tr style="font-weight:600;background:#f9f9f9;">
+                <td style="padding:2px 6px;border:1px solid #ccc;">Итого: ${lengths.length} шт</td>
+                <td style="padding:2px 6px;border:1px solid #ccc;">${totalLen.toFixed(2)} м / ${totalWeight.toFixed(3)} кг</td>
+                ${hasNotes ? '<td style="padding:2px 6px;border:1px solid #ccc;"></td>' : ''}
+              </tr>
+            </tfoot>
+          </table>
+        </div>`
+    }
+
+    const rows = lengthRows.map((r, i) => `<tr>
+      <td style="padding:2px 6px;border:1px solid #ccc;text-align:center;font-size:10px;">${i + 1}</td>
+      <td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${r.len.toFixed(2)}</td>
+      ${hasNotes ? `<td style="padding:2px 6px;border:1px solid #ccc;font-size:10px;">${escapeHtml(r.note)}</td>` : ''}
+    </tr>`).join('')
 
     return `
       <div style="margin-bottom:12px;">
@@ -148,7 +230,7 @@ function generateDocumentHtml(doc) {
           <tfoot>
             <tr style="font-weight:600;background:#f9f9f9;">
               <td style="padding:2px 6px;border:1px solid #ccc;">Итого: ${lengths.length} шт</td>
-              <td style="padding:2px 6px;border:1px solid #ccc;">${subtotalLen.toFixed(2)} м / ${subtotalWeight.toFixed(3)} кг</td>
+              <td style="padding:2px 6px;border:1px solid #ccc;">${totalLen.toFixed(2)} м / ${totalWeight.toFixed(3)} кг</td>
               ${hasNotes ? '<td style="padding:2px 6px;border:1px solid #ccc;"></td>' : ''}
             </tr>
           </tfoot>
